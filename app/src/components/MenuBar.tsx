@@ -6,6 +6,7 @@ import { downloadProject } from '../io/save'
 import { openProjectFile, LoadError } from '../io/load'
 import { exportStageToPng } from '../io/exportPng'
 import { getStage } from '../canvas/stageRegistry'
+import { startImageImport } from '../canvas/tools/ImageTool'
 import styles from './MenuBar.module.css'
 
 const isMac = typeof navigator !== 'undefined' && /Mac/.test(navigator.platform)
@@ -106,6 +107,8 @@ function buildMenus({ showGrid, snapToGrid, view, hasSelection, canUndo, canRedo
         { label: 'Open...', onSelect: handleOpen },
         'separator',
         { label: 'Save', shortcut: `${modKey}+S`, onSelect: handleSave },
+        'separator',
+        { label: 'Import Reference Image...', onSelect: startImageImport },
         'separator',
         { label: 'Export as PNG', onSelect: handleExportPng },
         { label: 'Export as SVG', disabled: true },

@@ -27,3 +27,49 @@
   color: #555;
   margin: 0;
 }
+
+.section {
+  display: flex;
+  flex-direction: column;
+}
+
+.sectionTitle {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #888;
+  margin-bottom: 10px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+
+.fieldLabel {
+  font-size: 11px;
+  color: #999;
+}
+
+.input {
+  padding: 5px 8px;
+  background: #1a1a1a;
+  border: 1px solid #444;
+  border-radius: 4px;
+  color: #eee;
+  font-size: 13px;
+  outline: none;
+}
+
+.input:focus {
+  border-color: #2d5be3;
+}
+
+.hint {
+  font-size: 11px;
+  color: #666;
+  margin-bottom: 10px;
+}

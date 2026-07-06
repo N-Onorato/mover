@@ -7,9 +7,11 @@ import { useUIStore } from '../store/uiStore'
 import { GridLayer } from './layers/GridLayer'
 import { ReferenceImageLayer } from './layers/ReferenceImageLayer'
 import { RoomLayer } from './layers/RoomLayer'
+import { HighlightLayer } from './layers/HighlightLayer'
 import { FurnitureLayer } from './layers/FurnitureLayer'
 import { AnnotationLayer } from './layers/AnnotationLayer'
 import { SelectionLayer } from './layers/SelectionLayer'
+import { Rulers } from './Rulers'
 import { SelectTool } from './tools/SelectTool'
 import { RoomTool } from './tools/RoomTool'
 import { FurnitureTool } from './tools/FurnitureTool'
@@ -209,12 +211,23 @@ export function LayoutCanvas() {
             height={size.height}
           />
         )}
-        <ReferenceImageLayer />
+        <ReferenceImageLayer pixelsPerUnit={pixelsPerUnit} />
         <RoomLayer pixelsPerUnit={pixelsPerUnit} />
+        <HighlightLayer pixelsPerUnit={pixelsPerUnit} />
         <FurnitureLayer pixelsPerUnit={pixelsPerUnit} />
         <AnnotationLayer />
         <SelectionLayer pixelsPerUnit={pixelsPerUnit} />
       </Stage>
+      <Rulers
+        pixelsPerUnit={pixelsPerUnit}
+        gridSize={settings.gridSize}
+        viewX={view.x}
+        viewY={view.y}
+        zoom={view.scale}
+        width={size.width}
+        height={size.height}
+        units={settings.units}
+      />
     </div>
   )
 }

@@ -42,6 +42,17 @@ export function polygonBoundingBox(points: Point[]): { x: number; y: number; wid
   return { x: minX, y: minY, width: Math.max(...xs) - minX, height: Math.max(...ys) - minY }
 }
 
+export function distanceToSegment(pt: Point, a: Point, b: Point): number {
+  const dx = b.x - a.x
+  const dy = b.y - a.y
+  const lengthSq = dx * dx + dy * dy
+  if (lengthSq === 0) return distance(pt, a)
+  let t = ((pt.x - a.x) * dx + (pt.y - a.y) * dy) / lengthSq
+  t = Math.max(0, Math.min(1, t))
+  const closest: Point = { x: a.x + t * dx, y: a.y + t * dy }
+  return distance(pt, closest)
+}
+
 export function rectPoints(x: number, y: number, w: number, h: number): Point[] {
   return [
     { x, y },

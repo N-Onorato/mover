@@ -1,4 +1,4 @@
-import { Layer, Line, Circle } from 'react-konva'
+import { Layer, Line, Circle, Text } from 'react-konva'
 import { useUIStore } from '../../store/uiStore'
 import { distance } from '../../utils/geometry'
 
@@ -8,8 +8,47 @@ interface Props {
 
 const CLOSE_THRESHOLD_PX = 14
 
+function CalibrationPreview({ pixelsPerUnit }: Props) {
+  const drawingState = useUIStore((s) => s.drawingState)
+  if (!drawingState || drawingState.kind !== 'calibration') return null
+  const { points, cursor } = drawingState
+  const ppu = pixelsPerUnit
+
+  const first = points[0]
+  const end = points[0] ? cursor : null
+  if (!first || !end) return null
+
+  const worldDist = distance(first, end)
+
+  return (
+    <Layer listening={false}>
+      <Line
+        points={[first.x * ppu, first.y * ppu, end.x * ppu, end.y * ppu]}
+        stroke="#ffb400"
+        strokeWidth={2.5}
+        dash={[8, 5]}
+        listening={false}
+      />
+      <Circle x={first.x * ppu} y={first.y * ppu} radius={4} fill="#ffb400" listening={false} />
+      <Circle x={end.x * ppu} y={end.y * ppu} radius={4} fill="#ffb400" listening={false} />
+      <Text
+        x={(first.x * ppu + end.x * ppu) / 2 + 6}
+        y={(first.y * ppu + end.y * ppu) / 2 - 16}
+        text={worldDist.toFixed(1)}
+        fill="#ffb400"
+        fontSize={12}
+        listening={false}
+      />
+    </Layer>
+  )
+}
+
 export function SelectionLayer({ pixelsPerUnit }: Props) {
   const drawingState = useUIStore((s) => s.drawingState)
+
+  if (drawingState?.kind === 'calibration') {
+    return <CalibrationPreview pixelsPerUnit={pixelsPerUnit} />
+  }
 
   if (!drawingState || drawingState.kind !== 'room') return <Layer />
 
@@ -35,7 +74,7 @@ export function SelectionLayer({ pixelsPerUnit }: Props) {
         <Line
           points={flatCommitted}
           stroke="#4a9eff"
-          strokeWidth={2}
+          strokeWidth={3}
           dash={[]}
           listening={false}
         />
@@ -51,9 +90,9 @@ export function SelectionLayer({ pixelsPerUnit }: Props) {
             cursorPx.y,
           ]}
           stroke="#4a9eff"
-          strokeWidth={1.5}
-          dash={[6, 4]}
-          opacity={0.8}
+          strokeWidth={2.5}
+          dash={[8, 5]}
+          opacity={0.9}
           listening={false}
         />
       )}
@@ -63,9 +102,9 @@ export function SelectionLayer({ pixelsPerUnit }: Props) {
         <Line
           points={[cursorPx.x, cursorPx.y, firstPx.x, firstPx.y]}
           stroke="#4a9eff"
-          strokeWidth={1}
-          dash={[4, 6]}
-          opacity={0.4}
+          strokeWidth={2}
+          dash={[5, 7]}
+          opacity={0.5}
           listening={false}
         />
       )}

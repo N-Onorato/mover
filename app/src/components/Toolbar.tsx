@@ -1,4 +1,5 @@
 import { useUIStore, type Tool } from '../store/uiStore'
+import { startImageImport } from '../canvas/tools/ImageTool'
 import styles from './Toolbar.module.css'
 
 const TOOLS: { id: Tool; label: string }[] = [
@@ -22,7 +23,7 @@ export function Toolbar() {
           <button
             key={t.id}
             className={`${styles.toolBtn} ${activeTool === t.id ? styles.active : ''}`}
-            onClick={() => setActiveTool(t.id)}
+            onClick={() => (t.id === 'image' ? startImageImport() : setActiveTool(t.id))}
           >
             {t.label}
           </button>

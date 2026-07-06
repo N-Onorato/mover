@@ -1,6 +1,9 @@
 import type { ReactElement } from 'react'
-import { Layer, Line } from 'react-konva'
+import { Layer, Line, Circle } from 'react-konva'
 import { adaptiveGridSize } from '../../utils/snap'
+
+const ORIGIN_MARKER_RADIUS = 5
+const ORIGIN_AXIS_LENGTH = 16
 
 interface Props {
   pixelsPerUnit: number
@@ -16,7 +19,15 @@ export function GridLayer({ pixelsPerUnit, gridSize, viewX, viewY, zoom, width, 
   const spacing = adaptiveGridSize(gridSize, zoom)
   const spacingPx = spacing * pixelsPerUnit
 
-  if (spacingPx < 4) return <Layer listening={false} />
+  const originMarker = (
+    <>
+      <Line points={[-ORIGIN_AXIS_LENGTH, 0, ORIGIN_AXIS_LENGTH, 0]} stroke="#e8543a" strokeWidth={2} listening={false} />
+      <Line points={[0, -ORIGIN_AXIS_LENGTH, 0, ORIGIN_AXIS_LENGTH]} stroke="#e8543a" strokeWidth={2} listening={false} />
+      <Circle x={0} y={0} radius={ORIGIN_MARKER_RADIUS} fill="#e8543a" listening={false} />
+    </>
+  )
+
+  if (spacingPx < 4) return <Layer listening={false}>{originMarker}</Layer>
 
   // Visible world bounds (in stage-local pixel coords, before pan)
   const left = -viewX
@@ -45,6 +56,7 @@ export function GridLayer({ pixelsPerUnit, gridSize, viewX, viewY, zoom, width, 
     <Layer listening={false}>
       {vLines}
       {hLines}
+      {originMarker}
     </Layer>
   )
 }

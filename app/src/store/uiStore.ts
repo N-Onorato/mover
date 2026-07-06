@@ -15,11 +15,24 @@ export interface RoomDrawingState {
   cursor: Point | null  // current cursor in world space (snapped)
 }
 
-export type DrawingState = RoomDrawingState
+export interface CalibrationDrawingState {
+  kind: 'calibration'
+  imageId: string
+  points: Point[]       // 0, 1, or 2 committed points in world space
+  cursor: Point | null  // current cursor in world space
+}
+
+export type DrawingState = RoomDrawingState | CalibrationDrawingState
+
+export interface SelectedWall {
+  roomId: string
+  edgeIndex: number
+}
 
 interface UIStore {
   activeTool: Tool
   selectedIds: string[]
+  selectedWall: SelectedWall | null
   showGrid: boolean
   drawingState: DrawingState | null
   showLayers: {
@@ -40,6 +53,7 @@ interface UIStore {
   setSelection: (ids: string[]) => void
   addToSelection: (id: string) => void
   clearSelection: () => void
+  setSelectedWall: (wall: SelectedWall | null) => void
   toggleGrid: () => void
   setDrawingState: (state: DrawingState | null) => void
   toggleLayerVisibility: (layer: keyof UIStore['showLayers']) => void
@@ -50,6 +64,7 @@ interface UIStore {
 export const useUIStore = create<UIStore>((set) => ({
   activeTool: 'select',
   selectedIds: [],
+  selectedWall: null,
   showGrid: true,
   drawingState: null,
   showLayers: {
@@ -66,10 +81,12 @@ export const useUIStore = create<UIStore>((set) => ({
   },
   view: { x: 0, y: 0, scale: 1 },
 
-  setActiveTool: (tool) => set({ activeTool: tool, selectedIds: [], drawingState: null }),
-  setSelection: (ids) => set({ selectedIds: ids }),
+  setActiveTool: (tool) =>
+    set({ activeTool: tool, selectedIds: [], selectedWall: null, drawingState: null }),
+  setSelection: (ids) => set({ selectedIds: ids, selectedWall: null }),
   addToSelection: (id) => set((s) => ({ selectedIds: [...s.selectedIds, id] })),
-  clearSelection: () => set({ selectedIds: [] }),
+  clearSelection: () => set({ selectedIds: [], selectedWall: null }),
+  setSelectedWall: (wall) => set({ selectedWall: wall }),
   toggleGrid: () => set((s) => ({ showGrid: !s.showGrid })),
   setDrawingState: (state) => set({ drawingState: state }),
   toggleLayerVisibility: (layer) =>
