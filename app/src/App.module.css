@@ -1,0 +1,19 @@
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: #1a1a1a;
+  color: #eee;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+.workspace {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.rightPanels {
+  display: flex;
+  flex-direction: column;
+}

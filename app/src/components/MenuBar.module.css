@@ -1,0 +1,88 @@
+.menuBar {
+  display: flex;
+  align-items: center;
+  height: 30px;
+  padding: 0 6px;
+  background: #161616;
+  border-bottom: 1px solid #333;
+  color: #ddd;
+  font-size: 13px;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.menuItem {
+  position: relative;
+}
+
+.menuLabel {
+  padding: 5px 10px;
+  cursor: pointer;
+  border-radius: 3px;
+  background: transparent;
+}
+
+.menuLabel:hover,
+.menuItem.open .menuLabel {
+  background: #2d5be3;
+  color: #fff;
+}
+
+.dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  min-width: 220px;
+  background: #202020;
+  border: 1px solid #3a3a3a;
+  border-radius: 4px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+  padding: 4px;
+  z-index: 100;
+}
+
+.entry {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 6px 10px;
+  border-radius: 3px;
+  cursor: pointer;
+  color: #eee;
+  background: transparent;
+  border: none;
+  width: 100%;
+  text-align: left;
+  font-size: 13px;
+}
+
+.entry:hover:not(:disabled) {
+  background: #2d5be3;
+  color: #fff;
+}
+
+.entry:disabled {
+  color: #666;
+  cursor: default;
+}
+
+.shortcut {
+  color: #888;
+  font-size: 12px;
+}
+
+.entry:hover:not(:disabled) .shortcut {
+  color: #dde5ff;
+}
+
+.separator {
+  height: 1px;
+  margin: 4px 6px;
+  background: #3a3a3a;
+}
+
+.check {
+  width: 14px;
+  display: inline-block;
+}
