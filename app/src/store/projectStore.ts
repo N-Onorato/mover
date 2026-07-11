@@ -22,6 +22,7 @@ function newProject(): Project {
       snapToWalls: true,
       defaultWallThickness: 6,
       backgroundColor: '#f5f5f0',
+      rulerMode: 'feet-inches',
     },
     rooms: [],
     furnitureInstances: [],
@@ -40,6 +41,7 @@ interface ProjectStore {
   applySnapshot: (project: Project) => void
   touchModified: () => void
   toggleSnapToGrid: () => void
+  toggleRulerMode: () => void
   removeEntities: (ids: string[]) => void
 
   addRoom: (room: Room) => void
@@ -83,6 +85,17 @@ export const useProjectStore = create<ProjectStore>((set) => ({
       project: {
         ...s.project,
         settings: { ...s.project.settings, snapToGrid: !s.project.settings.snapToGrid },
+      },
+      isDirty: true,
+    })),
+  toggleRulerMode: () =>
+    set((s) => ({
+      project: {
+        ...s.project,
+        settings: {
+          ...s.project.settings,
+          rulerMode: s.project.settings.rulerMode === 'feet-inches' ? 'simple' : 'feet-inches',
+        },
       },
       isDirty: true,
     })),

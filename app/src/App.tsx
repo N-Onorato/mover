@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { Group, Panel, Separator, useDefaultLayout } from 'react-resizable-panels'
 import { MenuBar } from './components/MenuBar'
 import { Toolbar } from './components/Toolbar'
 import { CatalogPanel } from './components/CatalogPanel'
@@ -9,6 +10,7 @@ import { useProjectStore } from './store/projectStore'
 import { loadFromLocalStorage } from './io/load'
 import { saveToLocalStorage } from './io/save'
 import styles from './App.module.css'
+import resizeStyles from './components/ResizeHandle.module.css'
 
 const AUTOSAVE_DEBOUNCE_MS = 1000
 
@@ -26,17 +28,35 @@ export default function App() {
     })
   }, [])
 
+  const workspaceLayout = useDefaultLayout({ id: 'mover-workspace-layout', storage: localStorage })
+  const sidebarLayout = useDefaultLayout({ id: 'mover-right-sidebar', storage: localStorage })
+
   return (
     <div className={styles.app}>
       <MenuBar />
       <Toolbar />
       <div className={styles.workspace}>
-        <CatalogPanel />
-        <LayoutCanvas />
-        <div className={styles.rightPanels}>
-          <LayerPanel />
-          <PropertiesPanel />
-        </div>
+        <Group orientation="horizontal" {...workspaceLayout}>
+          <Panel id="catalog" defaultSize="20%" minSize="12%">
+            <CatalogPanel />
+          </Panel>
+          <Separator className={resizeStyles.handle} />
+          <Panel id="canvas" minSize="30%">
+            <LayoutCanvas />
+          </Panel>
+          <Separator className={resizeStyles.handle} />
+          <Panel id="sidebar" defaultSize="22%" minSize="14%">
+            <Group orientation="vertical" {...sidebarLayout}>
+              <Panel id="layers" minSize="15%">
+                <LayerPanel />
+              </Panel>
+              <Separator className={resizeStyles.handleHorizontal} />
+              <Panel id="properties" minSize="15%">
+                <PropertiesPanel />
+              </Panel>
+            </Group>
+          </Panel>
+        </Group>
       </div>
     </div>
   )

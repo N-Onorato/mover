@@ -1,14 +1,17 @@
 import { Layer, Line, Circle, Text } from 'react-konva'
 import { useUIStore } from '../../store/uiStore'
 import { distance } from '../../utils/geometry'
+import { formatLength } from '../../utils/units'
+import type { UnitSystem } from '../../utils/units'
 
 interface Props {
   pixelsPerUnit: number
+  units: UnitSystem
 }
 
 const CLOSE_THRESHOLD_PX = 14
 
-function CalibrationPreview({ pixelsPerUnit }: Props) {
+function CalibrationPreview({ pixelsPerUnit, units }: Props) {
   const drawingState = useUIStore((s) => s.drawingState)
   if (!drawingState || drawingState.kind !== 'calibration') return null
   const { points, cursor } = drawingState
@@ -34,7 +37,7 @@ function CalibrationPreview({ pixelsPerUnit }: Props) {
       <Text
         x={(first.x * ppu + end.x * ppu) / 2 + 6}
         y={(first.y * ppu + end.y * ppu) / 2 - 16}
-        text={worldDist.toFixed(1)}
+        text={formatLength(worldDist, units)}
         fill="#ffb400"
         fontSize={12}
         listening={false}
@@ -43,11 +46,11 @@ function CalibrationPreview({ pixelsPerUnit }: Props) {
   )
 }
 
-export function SelectionLayer({ pixelsPerUnit }: Props) {
+export function SelectionLayer({ pixelsPerUnit, units }: Props) {
   const drawingState = useUIStore((s) => s.drawingState)
 
   if (drawingState?.kind === 'calibration') {
-    return <CalibrationPreview pixelsPerUnit={pixelsPerUnit} />
+    return <CalibrationPreview pixelsPerUnit={pixelsPerUnit} units={units} />
   }
 
   if (!drawingState || drawingState.kind !== 'room') return <Layer />

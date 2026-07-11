@@ -8,12 +8,6 @@
 }
 
 .workspace {
-  display: flex;
   flex: 1;
   overflow: hidden;
-}
-
-.rightPanels {
-  display: flex;
-  flex-direction: column;
 }

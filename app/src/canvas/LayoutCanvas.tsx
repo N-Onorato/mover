@@ -209,6 +209,8 @@ export function LayoutCanvas() {
             zoom={view.scale}
             width={size.width}
             height={size.height}
+            units={settings.units}
+            rulerMode={settings.rulerMode}
           />
         )}
         <ReferenceImageLayer pixelsPerUnit={pixelsPerUnit} />
@@ -216,7 +218,7 @@ export function LayoutCanvas() {
         <HighlightLayer pixelsPerUnit={pixelsPerUnit} />
         <FurnitureLayer pixelsPerUnit={pixelsPerUnit} />
         <AnnotationLayer />
-        <SelectionLayer pixelsPerUnit={pixelsPerUnit} />
+        <SelectionLayer pixelsPerUnit={pixelsPerUnit} units={settings.units} />
       </Stage>
       <Rulers
         pixelsPerUnit={pixelsPerUnit}
@@ -227,6 +229,7 @@ export function LayoutCanvas() {
         width={size.width}
         height={size.height}
         units={settings.units}
+        rulerMode={settings.rulerMode}
       />
     </div>
   )

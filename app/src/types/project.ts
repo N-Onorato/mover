@@ -24,6 +24,7 @@ export interface ProjectSettings {
   snapToWalls: boolean
   defaultWallThickness: number
   backgroundColor: string
+  rulerMode: 'feet-inches' | 'simple'
 }
 
 export interface Room {

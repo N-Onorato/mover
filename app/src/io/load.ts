@@ -17,6 +17,10 @@ export function parseProject(json: string): Project {
     throw new LoadError(`Unsupported project version: ${p.version}`)
   }
   // TODO: schema validation and migrations
+  const settings = p.settings as Record<string, unknown> | undefined
+  if (settings && settings.rulerMode === undefined) {
+    settings.rulerMode = 'feet-inches'
+  }
   return data as Project
 }
 

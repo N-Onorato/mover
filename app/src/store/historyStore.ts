@@ -17,6 +17,8 @@ export const useHistoryStore = create<HistoryStore>((set, get) => ({
   past: [],
   future: [],
 
+  // Call once per user gesture (on pointer-down/commit), not per pointer-move frame —
+  // see RoomTool.commitRoom and PropertiesPanel.useSnapshotOnFocus for the pattern.
   pushSnapshot: (project) =>
     set((s) => ({
       past: [...s.past.slice(-MAX_HISTORY + 1), project],

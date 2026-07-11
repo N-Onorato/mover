@@ -2,7 +2,9 @@ import type { ToolHandlers } from './SelectTool'
 import type { Point } from '../../types/project'
 import { useUIStore } from '../../store/uiStore'
 import { useProjectStore } from '../../store/projectStore'
+import { useHistoryStore } from '../../store/historyStore'
 import { distance } from '../../utils/geometry'
+import { parseLength } from '../../utils/units'
 import { openImageFile, ImageLoadError } from '../../io/loadImage'
 
 const DEFAULT_WIDTH_WORLD_UNITS = 96 // ~8ft at default (uncalibrated) scale
@@ -27,6 +29,7 @@ export function startImageImport() {
         visible: true,
         calibration: null,
       }
+      useHistoryStore.getState().pushSnapshot(useProjectStore.getState().project)
       useProjectStore.getState().addReferenceImage(image)
       useUIStore.getState().setActiveTool('image')
       useUIStore.getState().setDrawingState({
@@ -52,12 +55,24 @@ function finishCalibration(imageId: string, points: [Point, Point]) {
     cancelCalibration()
     return
   }
-  const input = window.prompt('Enter the real-world length of this line (in inches):', '')
-  const realLength = input ? parseFloat(input) : NaN
-  if (Number.isFinite(realLength) && realLength > 0) {
+  const units = useProjectStore.getState().project.settings.units
+  let promptMessage = 'Enter the real-world length of this line:'
+  let realLength: number | null = null
+  while (realLength === null) {
+    const input = window.prompt(promptMessage, '')
+    if (input === null) break
+    const result = parseLength(input, units)
+    if (result.ok) {
+      realLength = result.value
+    } else {
+      promptMessage = `${result.error}\nEnter the real-world length of this line:`
+    }
+  }
+  if (realLength !== null) {
     const { project, updateReferenceImage } = useProjectStore.getState()
     const image = project.referenceImages.find((r) => r.id === imageId)
     if (image) {
+      useHistoryStore.getState().pushSnapshot(project)
       const scale = realLength / worldDist
       updateReferenceImage(imageId, {
         width: image.width * scale,

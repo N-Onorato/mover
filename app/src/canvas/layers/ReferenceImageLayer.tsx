@@ -1,4 +1,4 @@
-import { Fragment } from 'react'
+import { useMemo } from 'react'
 import { Layer, Image as KonvaImage } from 'react-konva'
 import { useProjectStore } from '../../store/projectStore'
 import { useHtmlImage } from '../../utils/useHtmlImage'
@@ -32,12 +32,11 @@ interface Props {
 
 export function ReferenceImageLayer({ pixelsPerUnit }: Props) {
   const images = useProjectStore((s) => s.project.referenceImages)
+  const visibleImages = useMemo(() => images.filter((img) => img.visible), [images])
   return (
     <Layer listening={false}>
-      {images.filter((img) => img.visible).map((img) => (
-        <Fragment key={img.id}>
-          <ReferenceImageNode image={img} pixelsPerUnit={pixelsPerUnit} />
-        </Fragment>
+      {visibleImages.map((img) => (
+        <ReferenceImageNode key={img.id} image={img} pixelsPerUnit={pixelsPerUnit} />
       ))}
     </Layer>
   )

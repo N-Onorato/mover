@@ -92,13 +92,24 @@ type MenuSpec = { label: string; entries: (MenuEntry | 'separator')[] }
 interface MenuState {
   showGrid: boolean
   snapToGrid: boolean
+  units: 'imperial' | 'metric'
+  rulerMode: 'feet-inches' | 'simple'
   view: { x: number; y: number; scale: number }
   hasSelection: boolean
   canUndo: boolean
   canRedo: boolean
 }
 
-function buildMenus({ showGrid, snapToGrid, view, hasSelection, canUndo, canRedo }: MenuState): MenuSpec[] {
+function buildMenus({
+  showGrid,
+  snapToGrid,
+  units,
+  rulerMode,
+  view,
+  hasSelection,
+  canUndo,
+  canRedo,
+}: MenuState): MenuSpec[] {
   return [
     {
       label: 'File',
@@ -161,7 +172,16 @@ function buildMenus({ showGrid, snapToGrid, view, hasSelection, canUndo, canRedo
         {
           label: 'Snap to Grid',
           checked: snapToGrid,
-          onSelect: () => useProjectStore.getState().toggleSnapToGrid(),
+          onSelect: () => {
+            useHistoryStore.getState().pushSnapshot(useProjectStore.getState().project)
+            useProjectStore.getState().toggleSnapToGrid()
+          },
+        },
+        {
+          label: 'Feet/Inch Ruler',
+          checked: rulerMode === 'feet-inches',
+          disabled: units === 'metric',
+          onSelect: () => useProjectStore.getState().toggleRulerMode(),
         },
       ],
     },
@@ -176,12 +196,14 @@ export function MenuBar() {
   const view = useUIStore((s) => s.view)
   const hasSelection = useUIStore((s) => s.selectedIds.length > 0)
   const snapToGrid = useProjectStore((s) => s.project.settings.snapToGrid)
+  const units = useProjectStore((s) => s.project.settings.units)
+  const rulerMode = useProjectStore((s) => s.project.settings.rulerMode)
   const canUndo = useHistoryStore((s) => s.past.length > 0)
   const canRedo = useHistoryStore((s) => s.future.length > 0)
 
   const menus = useMemo(
-    () => buildMenus({ showGrid, snapToGrid, view, hasSelection, canUndo, canRedo }),
-    [showGrid, snapToGrid, view, hasSelection, canUndo, canRedo],
+    () => buildMenus({ showGrid, snapToGrid, units, rulerMode, view, hasSelection, canUndo, canRedo }),
+    [showGrid, snapToGrid, units, rulerMode, view, hasSelection, canUndo, canRedo],
   )
 
   useEffect(() => {
