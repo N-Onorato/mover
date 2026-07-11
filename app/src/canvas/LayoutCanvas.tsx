@@ -14,7 +14,6 @@ import { SelectionLayer } from './layers/SelectionLayer'
 import { Rulers } from './Rulers'
 import { SelectTool } from './tools/SelectTool'
 import { RoomTool } from './tools/RoomTool'
-import { FurnitureTool } from './tools/FurnitureTool'
 import { ImageTool } from './tools/ImageTool'
 import { AnnotationTool } from './tools/AnnotationTool'
 import type { ToolHandlers } from './tools/SelectTool'
@@ -29,7 +28,6 @@ const BASE_PIXELS_PER_UNIT = 10
 const TOOLS: Record<string, ToolHandlers> = {
   select: SelectTool,
   room: RoomTool,
-  furniture: FurnitureTool,
   image: ImageTool,
   annotation: AnnotationTool,
 }

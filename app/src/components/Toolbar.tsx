@@ -5,7 +5,6 @@ import styles from './Toolbar.module.css'
 const TOOLS: { id: Tool; label: string }[] = [
   { id: 'select', label: 'Select' },
   { id: 'room', label: 'Room' },
-  { id: 'furniture', label: 'Furniture' },
   { id: 'image', label: 'Image' },
   { id: 'annotation', label: 'Annotate' },
 ]

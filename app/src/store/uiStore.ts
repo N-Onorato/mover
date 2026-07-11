@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import type { Point } from '../types/project'
 
-export type Tool = 'select' | 'room' | 'furniture' | 'image' | 'annotation'
+export type Tool = 'select' | 'room' | 'image' | 'annotation'
 
 export interface ViewState {
   x: number
@@ -95,7 +95,6 @@ interface UIStore {
 export const TOOL_LABELS: Record<Tool, string> = {
   select: 'Select',
   room: 'Room',
-  furniture: 'Furniture',
   image: 'Image',
   annotation: 'Annotation',
 }
@@ -121,8 +120,6 @@ export function getToolHint(activeTool: Tool, drawingState: DrawingState | null)
       return 'Select: click to select, drag to marquee-select'
     case 'room':
       return 'Room: click to start drawing'
-    case 'furniture':
-      return 'Furniture: click to place item'
     case 'image':
       return 'Image: import a photo, then calibrate its scale'
     case 'annotation':
