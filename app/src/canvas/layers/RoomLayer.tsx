@@ -2,8 +2,8 @@ import { Fragment } from 'react'
 import { Layer, Line, Text } from 'react-konva'
 import { useProjectStore } from '../../store/projectStore'
 import { useUIStore } from '../../store/uiStore'
-import { polygonBoundingBox, distance, angle } from '../../utils/geometry'
-import { formatLength } from '../../utils/units'
+import { polygonBoundingBox } from '../../utils/geometry'
+import { WallLengthLabel } from '../WallLengthLabel'
 import type { Point } from '../../types/project'
 
 interface Props {
@@ -49,26 +49,25 @@ export function RoomLayer({ pixelsPerUnit }: Props) {
             {room.name && (
               <Text x={cx} y={cy} text={room.name} align="center" offsetX={40} offsetY={8} fill="#ddd" fontSize={13} />
             )}
-            {/* D1: per-wall length labels, toggleable via uiStore.showWallLabels */}
+            {/* D1/E4: per-wall length labels, toggleable via uiStore.showWallLabels.
+                Offset outward from the room's centroid (bounding-box center),
+                scaled by wall thickness + a fixed margin, so labels clear the
+                rendered stroke instead of sitting on the centerline. */}
             {showWallLabels &&
               effectivePoints.map((a, i) => {
                 const b = effectivePoints[(i + 1) % effectivePoints.length]
-                const lenWorld = distance(a, b)
-                if (lenWorld <= 0) return null
-                const angleDeg = angle(a, b)
+                const centroid: Point = { x: bb.x + bb.width / 2, y: bb.y + bb.height / 2 }
                 return (
-                  <Text
+                  <WallLengthLabel
                     key={`wall-label-${i}`}
-                    x={a.x * pixelsPerUnit}
-                    y={a.y * pixelsPerUnit}
-                    rotation={angleDeg}
-                    width={lenWorld * pixelsPerUnit}
-                    align="center"
-                    text={formatLength(lenWorld, units)}
-                    fontSize={11}
+                    keyId={`wall-label-${i}`}
+                    a={a}
+                    b={b}
+                    ppu={pixelsPerUnit}
+                    units={units}
+                    wallThicknessWorld={room.wallThickness}
+                    interiorRef={centroid}
                     fill="#8fa"
-                    offsetY={12}
-                    listening={false}
                   />
                 )
               })}

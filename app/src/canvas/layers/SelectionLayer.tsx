@@ -1,9 +1,11 @@
 import { Layer, Line, Circle, Text, Rect } from 'react-konva'
 import { useUIStore } from '../../store/uiStore'
-import { distance, angle } from '../../utils/geometry'
+import { useProjectStore } from '../../store/projectStore'
+import { distance } from '../../utils/geometry'
 import { formatLength } from '../../utils/units'
 import type { UnitSystem } from '../../utils/units'
 import type { Point } from '../../types/project'
+import { WallLengthLabel } from '../WallLengthLabel'
 
 interface Props {
   pixelsPerUnit: number
@@ -47,44 +49,11 @@ function CalibrationPreviewContents({ pixelsPerUnit, units }: Props) {
   )
 }
 
-// D1: wall length label centered on a segment, rotated to match its angle.
-function WallLengthLabel({
-  a,
-  b,
-  ppu,
-  units,
-  keyId,
-}: {
-  a: Point
-  b: Point
-  ppu: number
-  units: UnitSystem
-  keyId: string
-}) {
-  const lenWorld = distance(a, b)
-  if (lenWorld <= 0) return null
-  const angleDeg = angle(a, b)
-  return (
-    <Text
-      key={keyId}
-      x={a.x * ppu}
-      y={a.y * ppu}
-      rotation={angleDeg}
-      width={lenWorld * ppu}
-      align="center"
-      text={formatLength(lenWorld, units)}
-      fontSize={11}
-      fill="#4a9eff"
-      offsetY={14}
-      listening={false}
-    />
-  )
-}
-
 export function SelectionLayer({ pixelsPerUnit, units }: Props) {
   const drawingState = useUIStore((s) => s.drawingState)
   const marquee = useUIStore((s) => s.marquee)
   const showWallLabels = useUIStore((s) => s.showWallLabels)
+  const defaultWallThickness = useProjectStore((s) => s.project.settings.defaultWallThickness)
   const ppu = pixelsPerUnit
 
   // Marquee (C1): live drag rectangle rendered on top of everything else.
@@ -129,13 +98,37 @@ export function SelectionLayer({ pixelsPerUnit, units }: Props) {
     points.length >= 3 &&
     distance(cursorPx, firstPx) <= CLOSE_THRESHOLD_PX
 
-  // D1: wall length labels while drawing a room in progress - one per
-  // committed segment, plus the live ghost segment to the cursor.
+  // D1/E4: wall length labels while drawing a room in progress - one per
+  // committed segment, plus the live ghost segment to the cursor. The room
+  // isn't closed yet so there's no well-defined interior; once at least 3
+  // points are committed we approximate one as their centroid (including the
+  // live cursor point, so the ghost segment's label also points outward as
+  // the shape takes form), otherwise WallLengthLabel falls back to a fixed
+  // perpendicular direction.
+  const interiorRef: Point | undefined =
+    points.length >= 3
+      ? (() => {
+          const pts = cursor ? [...points, cursor] : points
+          const sum = pts.reduce((acc, p) => ({ x: acc.x + p.x, y: acc.y + p.y }), { x: 0, y: 0 })
+          return { x: sum.x / pts.length, y: sum.y / pts.length }
+        })()
+      : undefined
+
   const wallLabels: React.ReactNode[] = []
   if (showWallLabels) {
     for (let i = 0; i < points.length - 1; i++) {
       wallLabels.push(
-        <WallLengthLabel key={`seg-${i}`} keyId={`seg-${i}`} a={points[i]} b={points[i + 1]} ppu={ppu} units={units} />,
+        <WallLengthLabel
+          key={`seg-${i}`}
+          keyId={`seg-${i}`}
+          a={points[i]}
+          b={points[i + 1]}
+          ppu={ppu}
+          units={units}
+          wallThicknessWorld={defaultWallThickness}
+          interiorRef={interiorRef}
+          fill="#4a9eff"
+        />,
       )
     }
     if (cursor && points.length >= 1 && !nearClose) {
@@ -147,6 +140,9 @@ export function SelectionLayer({ pixelsPerUnit, units }: Props) {
           b={cursor}
           ppu={ppu}
           units={units}
+          wallThicknessWorld={defaultWallThickness}
+          interiorRef={interiorRef}
+          fill="#4a9eff"
         />,
       )
     }
