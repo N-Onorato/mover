@@ -60,6 +60,11 @@ export interface RoomDragState {
 
 export type DragState = WallDragState | VertexDragState | RoomDragState
 
+/** SelectTool's interaction state machine. Lives in the store (rather than a
+ * tool-module-level `let`) so it's inspectable and can't drift out of sync
+ * with re-renders. */
+export type InteractionMode = 'idle' | 'marquee' | 'wall' | 'vertex' | 'room'
+
 interface UIStore {
   activeTool: Tool
   selectedIds: string[]
@@ -68,6 +73,8 @@ interface UIStore {
   drawingState: DrawingState | null
   marquee: MarqueeState | null
   dragState: DragState | null
+  interactionMode: InteractionMode
+  dragAnchorWorld: Point | null
   showWallLabels: boolean
   showLayers: {
     referenceImages: boolean
@@ -92,6 +99,8 @@ interface UIStore {
   setDrawingState: (state: DrawingState | null) => void
   setMarquee: (marquee: MarqueeState | null) => void
   setDragState: (dragState: DragState | null) => void
+  setInteractionMode: (mode: InteractionMode) => void
+  setDragAnchorWorld: (pt: Point | null) => void
   toggleWallLabels: () => void
   toggleLayerVisibility: (layer: keyof UIStore['showLayers']) => void
   toggleLayerLock: (layer: keyof UIStore['lockedLayers']) => void
@@ -144,6 +153,8 @@ export const useUIStore = create<UIStore>((set) => ({
   drawingState: null,
   marquee: null,
   dragState: null,
+  interactionMode: 'idle',
+  dragAnchorWorld: null,
   showWallLabels: true,
   showLayers: {
     referenceImages: true,
@@ -167,6 +178,8 @@ export const useUIStore = create<UIStore>((set) => ({
       drawingState: null,
       marquee: null,
       dragState: null,
+      interactionMode: 'idle',
+      dragAnchorWorld: null,
     }),
   setSelection: (ids) => set({ selectedIds: ids, selectedWall: null }),
   addToSelection: (id) => set((s) => ({ selectedIds: [...s.selectedIds, id] })),
@@ -176,6 +189,8 @@ export const useUIStore = create<UIStore>((set) => ({
   setDrawingState: (state) => set({ drawingState: state }),
   setMarquee: (marquee) => set({ marquee }),
   setDragState: (dragState) => set({ dragState }),
+  setInteractionMode: (mode) => set({ interactionMode: mode }),
+  setDragAnchorWorld: (pt) => set({ dragAnchorWorld: pt }),
   toggleWallLabels: () => set((s) => ({ showWallLabels: !s.showWallLabels })),
   toggleLayerVisibility: (layer) =>
     set((s) => ({

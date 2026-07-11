@@ -16,7 +16,7 @@ import { SelectTool } from './tools/SelectTool'
 import { RoomTool } from './tools/RoomTool'
 import { ImageTool } from './tools/ImageTool'
 import { AnnotationTool } from './tools/AnnotationTool'
-import type { ToolHandlers } from './tools/SelectTool'
+import type { ToolHandlers, PointerModifiers } from './tools/SelectTool'
 import type { Point } from '../types/project'
 import { snapToGrid } from '../utils/snap'
 import { adaptiveGridSize } from '../utils/snap'
@@ -98,13 +98,16 @@ export function LayoutCanvas() {
     const stageLocalX = pos.x - view.x
     const stageLocalY = pos.y - view.y
     const worldRaw: Point = { x: stageLocalX / pixelsPerUnit, y: stageLocalY / pixelsPerUnit }
-    const isCalibratingImage =
-      activeTool === 'image' && useUIStore.getState().drawingState?.kind === 'calibration'
-    if (settings.snapToGrid && !isCalibratingImage) {
+    const wantsRaw = TOOLS[activeTool]?.wantsRawPointer?.() ?? false
+    if (settings.snapToGrid && !wantsRaw) {
       const gridSpacing = adaptiveGridSize(settings.gridSize, view.scale)
       return snapToGrid(worldRaw, gridSpacing)
     }
     return worldRaw
+  }
+
+  function getModifiers(e: KonvaEventObject<MouseEvent>): PointerModifiers {
+    return { shift: e.evt.shiftKey, ctrl: e.evt.ctrlKey }
   }
 
   // We need a stable ref for view so event handlers don't capture stale closures
@@ -131,7 +134,7 @@ export function LayoutCanvas() {
       }
       if (button === 0) {
         const worldPt = getWorldPoint(e)
-        TOOLS[activeTool]?.onPointerDown(worldPt, pixelsPerUnit)
+        TOOLS[activeTool]?.onPointerDown(worldPt, pixelsPerUnit, getModifiers(e))
       }
     },
     [activeTool, pixelsPerUnit, settings],
@@ -146,7 +149,7 @@ export function LayoutCanvas() {
         return
       }
       const worldPt = getWorldPoint(e)
-      TOOLS[activeTool]?.onPointerMove(worldPt, pixelsPerUnit)
+      TOOLS[activeTool]?.onPointerMove(worldPt, pixelsPerUnit, getModifiers(e))
     },
     [activeTool, pixelsPerUnit, settings, setView],
   )
@@ -158,10 +161,11 @@ export function LayoutCanvas() {
         return
       }
       if (e.evt.button === 0) {
-        TOOLS[activeTool]?.onPointerUp({ x: 0, y: 0 }, pixelsPerUnit)
+        const worldPt = getWorldPoint(e)
+        TOOLS[activeTool]?.onPointerUp(worldPt, pixelsPerUnit, getModifiers(e))
       }
     },
-    [activeTool, pixelsPerUnit],
+    [activeTool, pixelsPerUnit, settings],
   )
 
   function handleWheel(e: React.WheelEvent<HTMLDivElement>) {

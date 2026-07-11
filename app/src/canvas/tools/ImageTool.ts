@@ -85,7 +85,7 @@ function finishCalibration(imageId: string, points: [Point, Point]) {
 }
 
 export const ImageTool: ToolHandlers = {
-  onPointerDown(worldPt: Point, _ppu: number) {
+  onPointerDown(worldPt: Point, _ppu: number, _modifiers) {
     const { drawingState, setDrawingState } = useUIStore.getState()
     if (!drawingState || drawingState.kind !== 'calibration') return
     const pts = [...drawingState.points, worldPt]
@@ -95,16 +95,21 @@ export const ImageTool: ToolHandlers = {
     }
     setDrawingState({ ...drawingState, points: pts, cursor: worldPt })
   },
-  onPointerMove(worldPt: Point, _ppu: number) {
+  onPointerMove(worldPt: Point, _ppu: number, _modifiers) {
     const { drawingState, setDrawingState } = useUIStore.getState()
     if (!drawingState || drawingState.kind !== 'calibration') return
     setDrawingState({ ...drawingState, cursor: worldPt })
   },
-  onPointerUp(_worldPt, _ppu) {},
+  onPointerUp(_worldPt, _ppu, _modifiers) {},
   onKeyDown(e: KeyboardEvent) {
     if (e.key === 'Escape') cancelCalibration()
   },
   onRightClick() {
     cancelCalibration()
+  },
+  // B1/F4: calibration needs raw (unsnapped) coordinates so its endpoints can
+  // land on the reference photo's real features rather than grid intersections.
+  wantsRawPointer() {
+    return useUIStore.getState().drawingState?.kind === 'calibration'
   },
 }

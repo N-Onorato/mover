@@ -28,7 +28,7 @@ function commitRoom(points: Point[]) {
 }
 
 export const RoomTool: ToolHandlers = {
-  onPointerDown(worldPt: Point, ppu: number) {
+  onPointerDown(worldPt: Point, ppu: number, _modifiers) {
     const { drawingState, setDrawingState } = useUIStore.getState()
     const now = Date.now()
 
@@ -58,13 +58,13 @@ export const RoomTool: ToolHandlers = {
     setDrawingState({ ...drawingState, points: [...pts, worldPt], cursor: worldPt })
   },
 
-  onPointerMove(worldPt: Point, _ppu: number) {
+  onPointerMove(worldPt: Point, _ppu: number, _modifiers) {
     const { drawingState, setDrawingState } = useUIStore.getState()
     if (!drawingState || drawingState.kind !== 'room') return
     setDrawingState({ ...drawingState, cursor: worldPt })
   },
 
-  onPointerUp(_worldPt: Point, _ppu: number) {},
+  onPointerUp(_worldPt: Point, _ppu: number, _modifiers) {},
 
   onKeyDown(e: KeyboardEvent) {
     const { drawingState, setDrawingState } = useUIStore.getState()

@@ -5,40 +5,27 @@ import { useHistoryStore } from '../../store/historyStore'
 import { distance, distanceToSegment, pointInPolygon, pointsEqual } from '../../utils/geometry'
 import { isDoubleClick } from '../../utils/doubleClick'
 
+/** Keyboard modifiers active for a pointer event, forwarded by LayoutCanvas
+ * from the native MouseEvent so tools don't need their own window listeners. */
+export interface PointerModifiers {
+  shift: boolean
+  ctrl: boolean
+}
+
 export interface ToolHandlers {
-  onPointerDown(worldPt: Point, pixelsPerUnit: number): void
-  onPointerMove(worldPt: Point, pixelsPerUnit: number): void
-  onPointerUp(worldPt: Point, pixelsPerUnit: number): void
+  onPointerDown(worldPt: Point, pixelsPerUnit: number, modifiers: PointerModifiers): void
+  onPointerMove(worldPt: Point, pixelsPerUnit: number, modifiers: PointerModifiers): void
+  onPointerUp(worldPt: Point, pixelsPerUnit: number, modifiers: PointerModifiers): void
   onKeyDown(e: KeyboardEvent): void
   onRightClick(): void
+  /** Whether this tool wants raw (unsnapped) pointer coordinates instead of
+   * grid-snapped ones. Defaults to false (snapped) when omitted. */
+  wantsRawPointer?(): boolean
 }
 
 const WALL_HIT_THRESHOLD_PX = 8
 const VERTEX_HIT_THRESHOLD_PX = 9
 const MARQUEE_MIN_DRAG_PX = 4
-
-// Track the Shift modifier ourselves: LayoutCanvas's pointer handlers don't
-// forward keyboard modifier state to tools (onPointerDown/Move/Up only take
-// worldPt + pixelsPerUnit), so we listen at module scope instead of touching
-// LayoutCanvas.tsx (owned by another agent).
-let shiftHeld = false
-if (typeof window !== 'undefined') {
-  window.addEventListener('keydown', (e) => {
-    if (e.key === 'Shift') shiftHeld = true
-  })
-  window.addEventListener('keyup', (e) => {
-    if (e.key === 'Shift') shiftHeld = false
-  })
-}
-
-type Mode = 'idle' | 'marquee' | 'wall' | 'vertex' | 'room'
-
-// LayoutCanvas's onMouseUp handler calls onPointerUp({x:0,y:0}, ppu) - it does
-// not forward the real pointer position. We track the last live position from
-// onPointerMove ourselves so onPointerUp can use the true final point.
-let mode: Mode = 'idle'
-let lastWorldPt: Point | null = null
-let dragAnchorWorld: Point | null = null // wall/room drag: click point at drag start
 
 // E3b: double-click-on-wall vertex insertion. Track the last edge that was
 // clicked so a second click within the double-click window on the *same*
@@ -53,10 +40,10 @@ function wallThresholdWorld(basePx: number, wallThicknessWorld: number, ppu: num
 }
 
 export const SelectTool: ToolHandlers = {
-  onPointerDown(worldPt: Point, ppu: number) {
-    mode = 'idle'
-    lastWorldPt = worldPt
-    dragAnchorWorld = null
+  onPointerDown(worldPt: Point, ppu: number, modifiers: PointerModifiers) {
+    const { setInteractionMode, setDragAnchorWorld } = useUIStore.getState()
+    setInteractionMode('idle')
+    setDragAnchorWorld(null)
 
     const { rooms } = useProjectStore.getState().project
     const {
@@ -88,7 +75,7 @@ export const SelectTool: ToolHandlers = {
               originalPoints: pts,
               currentPoints: pts,
             })
-            mode = 'vertex'
+            setInteractionMode('vertex')
             lastClickEdge = null
             return
           }
@@ -123,7 +110,7 @@ export const SelectTool: ToolHandlers = {
               useProjectStore.getState().updateRoom(room.id, { points: nextPoints })
               setSelection([room.id])
               setSelectedWall(null)
-              mode = 'idle'
+              setInteractionMode('idle')
               return
             }
 
@@ -139,8 +126,8 @@ export const SelectTool: ToolHandlers = {
               originalPoints: pts,
               currentPoints: pts,
             })
-            mode = 'wall'
-            dragAnchorWorld = worldPt
+            setInteractionMode('wall')
+            setDragAnchorWorld(worldPt)
             return
           }
         }
@@ -176,8 +163,8 @@ export const SelectTool: ToolHandlers = {
           }
 
           setDragState({ kind: 'room', roomIds, originalPointsById, currentPointsById })
-          mode = 'room'
-          dragAnchorWorld = worldPt
+          setInteractionMode('room')
+          setDragAnchorWorld(worldPt)
           lastClickEdge = null
           return
         }
@@ -187,17 +174,17 @@ export const SelectTool: ToolHandlers = {
       // plain click (deselect) or an actual drag (box-select) is resolved on
       // pointer-up, once we know the total drag distance.
       lastClickEdge = null
-      mode = 'marquee'
-      setMarquee({ start: worldPt, end: worldPt, additive: shiftHeld })
+      setInteractionMode('marquee')
+      setMarquee({ start: worldPt, end: worldPt, additive: modifiers.shift })
       return
     }
 
     clearSelection()
   },
 
-  onPointerMove(worldPt: Point, _ppu: number) {
-    lastWorldPt = worldPt
-    const { dragState, setDragState, marquee, setMarquee } = useUIStore.getState()
+  onPointerMove(worldPt: Point, _ppu: number, _modifiers: PointerModifiers) {
+    const { dragState, setDragState, marquee, setMarquee, interactionMode: mode, dragAnchorWorld } =
+      useUIStore.getState()
 
     if (mode === 'marquee' && marquee) {
       setMarquee({ ...marquee, end: worldPt })
@@ -238,10 +225,20 @@ export const SelectTool: ToolHandlers = {
     }
   },
 
-  onPointerUp(_worldPt: Point, _ppu: number) {
-    const { dragState, setDragState, marquee, setMarquee, selectedIds, setSelection, clearSelection } =
-      useUIStore.getState()
-    const endPt = lastWorldPt
+  onPointerUp(worldPt: Point, ppu: number) {
+    const {
+      dragState,
+      setDragState,
+      marquee,
+      setMarquee,
+      selectedIds,
+      setSelection,
+      clearSelection,
+      interactionMode: mode,
+      setInteractionMode,
+      setDragAnchorWorld,
+    } = useUIStore.getState()
+    const endPt = worldPt
 
     if (mode === 'marquee' && marquee && endPt) {
       const movedWorld = distance(marquee.start, marquee.end)
@@ -251,7 +248,7 @@ export const SelectTool: ToolHandlers = {
       const minY = Math.min(marquee.start.y, marquee.end.y)
       const maxY = Math.max(marquee.start.y, marquee.end.y)
 
-      const wasDrag = movedWorld * _ppu >= MARQUEE_MIN_DRAG_PX
+      const wasDrag = movedWorld * ppu >= MARQUEE_MIN_DRAG_PX
 
       if (!wasDrag) {
         // Plain click on empty space: preserve existing deselect behavior.
@@ -276,8 +273,7 @@ export const SelectTool: ToolHandlers = {
       }
 
       setMarquee(null)
-      mode = 'idle'
-      lastWorldPt = null
+      setInteractionMode('idle')
       return
     }
 
@@ -290,9 +286,8 @@ export const SelectTool: ToolHandlers = {
         useProjectStore.getState().updateRoom(room.id, { points: dragState.currentPoints })
       }
       setDragState(null)
-      mode = 'idle'
-      dragAnchorWorld = null
-      lastWorldPt = null
+      setInteractionMode('idle')
+      setDragAnchorWorld(null)
       return
     }
 
@@ -315,15 +310,13 @@ export const SelectTool: ToolHandlers = {
         }
       }
       setDragState(null)
-      mode = 'idle'
-      dragAnchorWorld = null
-      lastWorldPt = null
+      setInteractionMode('idle')
+      setDragAnchorWorld(null)
       return
     }
 
-    mode = 'idle'
-    dragAnchorWorld = null
-    lastWorldPt = null
+    setInteractionMode('idle')
+    setDragAnchorWorld(null)
   },
 
   onKeyDown(_e) {},
