@@ -1,4 +1,12 @@
 import { adaptiveGridSize } from './snap'
+import type { UnitSystem } from './units'
+import type { ProjectSettings } from '../types/project'
+
+// Whether the imperial feet-inches ruler mode (vs. plain decimal grid ticks)
+// applies for the given units/ruler-mode settings.
+export function isFootInchRuler(units: UnitSystem, rulerMode: ProjectSettings['rulerMode']): boolean {
+  return units === 'imperial' && rulerMode === 'feet-inches'
+}
 
 // Grid-line spacing in screen pixels for the given base grid size and zoom.
 export function gridSpacingPx(baseGridSize: number, zoom: number, pixelsPerUnit: number): number {

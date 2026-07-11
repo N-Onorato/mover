@@ -2,7 +2,8 @@ import type { Point } from '../../types/project'
 import { useUIStore } from '../../store/uiStore'
 import { useProjectStore } from '../../store/projectStore'
 import { useHistoryStore } from '../../store/historyStore'
-import { distance, distanceToSegment, pointInPolygon } from '../../utils/geometry'
+import { distance, distanceToSegment, pointInPolygon, pointsEqual } from '../../utils/geometry'
+import { isDoubleClick } from '../../utils/doubleClick'
 
 export interface ToolHandlers {
   onPointerDown(worldPt: Point, pixelsPerUnit: number): void
@@ -15,7 +16,6 @@ export interface ToolHandlers {
 const WALL_HIT_THRESHOLD_PX = 8
 const VERTEX_HIT_THRESHOLD_PX = 9
 const MARQUEE_MIN_DRAG_PX = 4
-const DOUBLE_CLICK_MS = 300
 
 // Track the Shift modifier ourselves: LayoutCanvas's pointer handlers don't
 // forward keyboard modifier state to tools (onPointerDown/Move/Up only take
@@ -40,10 +40,9 @@ let mode: Mode = 'idle'
 let lastWorldPt: Point | null = null
 let dragAnchorWorld: Point | null = null // wall/room drag: click point at drag start
 
-// E3b: double-click-on-wall vertex insertion. Mirrors RoomTool's
-// lastClickMs pattern - track the last edge that was clicked so a second
-// click within the double-click window on the *same* edge inserts a vertex
-// instead of starting another wall drag.
+// E3b: double-click-on-wall vertex insertion. Track the last edge that was
+// clicked so a second click within the double-click window on the *same*
+// edge inserts a vertex instead of starting another wall drag.
 let lastClickMs = 0
 let lastClickEdge: { roomId: string; edgeIndex: number } | null = null
 
@@ -108,13 +107,13 @@ export const SelectTool: ToolHandlers = {
           const b = pts[(i + 1) % pts.length]
           if (distanceToSegment(worldPt, a, b) <= thresholdWorld) {
             const now = Date.now()
-            const isDoubleClick =
-              now - lastClickMs < DOUBLE_CLICK_MS &&
+            const doubleClicked =
+              isDoubleClick(lastClickMs, now) &&
               lastClickEdge !== null &&
               lastClickEdge.roomId === room.id &&
               lastClickEdge.edgeIndex === i
 
-            if (isDoubleClick) {
+            if (doubleClicked) {
               lastClickMs = 0
               lastClickEdge = null
               const { project } = useProjectStore.getState()
@@ -285,7 +284,7 @@ export const SelectTool: ToolHandlers = {
     if ((mode === 'wall' || mode === 'vertex') && dragState && (dragState.kind === 'wall' || dragState.kind === 'vertex')) {
       const { project } = useProjectStore.getState()
       const room = project.rooms.find((r) => r.id === dragState.roomId)
-      const moved = room ? JSON.stringify(room.points) !== JSON.stringify(dragState.currentPoints) : false
+      const moved = room ? !pointsEqual(room.points, dragState.currentPoints) : false
       if (room && moved) {
         useHistoryStore.getState().pushSnapshot(project)
         useProjectStore.getState().updateRoom(room.id, { points: dragState.currentPoints })
@@ -303,7 +302,7 @@ export const SelectTool: ToolHandlers = {
       for (const id of dragState.roomIds) {
         const room = project.rooms.find((r) => r.id === id)
         const nextPoints = dragState.currentPointsById[id]
-        if (room && nextPoints && JSON.stringify(room.points) !== JSON.stringify(nextPoints)) {
+        if (room && nextPoints && !pointsEqual(room.points, nextPoints)) {
           moved = true
           break
         }

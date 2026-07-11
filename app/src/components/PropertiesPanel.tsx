@@ -7,7 +7,7 @@ import { formatLength, parseLength } from '../utils/units'
 import type { Room } from '../types/project'
 import styles from './PropertiesPanel.module.css'
 
-function useSnapshotOnFocus() {
+export function useSnapshotOnFocus() {
   const snapshotTaken = useRef(false)
   return {
     onFocus: () => {
@@ -29,7 +29,7 @@ interface UndoableFieldProps {
   onCommit: (raw: string) => boolean
 }
 
-function UndoableField({ label, value, type = 'text', onCommit }: UndoableFieldProps) {
+export function UndoableField({ label, value, type = 'text', onCommit }: UndoableFieldProps) {
   const [local, setLocal] = useState(value)
   const snapshot = useSnapshotOnFocus()
   useEffect(() => setLocal(value), [value])
@@ -69,10 +69,9 @@ function WallProperties({ room, edgeIndex }: { room: Room; edgeIndex: number }) 
     const newLength = result.value
     const dx = b.x - a.x
     const dy = b.y - a.y
-    const len = currentLength
-    if (len === 0) return false
-    const dirX = dx / len
-    const dirY = dy / len
+    if (currentLength === 0) return false
+    const dirX = dx / currentLength
+    const dirY = dy / currentLength
     const newB = { x: a.x + dirX * newLength, y: a.y + dirY * newLength }
     const newPoints = room.points.map((p, i) => (i === (edgeIndex + 1) % room.points.length ? newB : p))
     updateRoom(room.id, { points: newPoints })

@@ -60,7 +60,6 @@ export function RoomLayer({ pixelsPerUnit }: Props) {
                 return (
                   <WallLengthLabel
                     key={`wall-label-${i}`}
-                    keyId={`wall-label-${i}`}
                     a={a}
                     b={b}
                     ppu={pixelsPerUnit}

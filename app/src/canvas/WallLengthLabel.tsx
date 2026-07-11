@@ -19,7 +19,6 @@ export function WallLengthLabel({
   wallThicknessWorld,
   interiorRef,
   fill,
-  keyId,
 }: {
   a: Point
   b: Point
@@ -28,7 +27,6 @@ export function WallLengthLabel({
   wallThicknessWorld: number
   interiorRef?: Point
   fill: string
-  keyId: string
 }) {
   const lenWorld = distance(a, b)
   if (lenWorld <= 0) return null
@@ -36,7 +34,6 @@ export function WallLengthLabel({
   const offsetY = wallLabelOffsetY(a, b, angleDeg, wallThicknessWorld, ppu, interiorRef)
   return (
     <Text
-      key={keyId}
       x={a.x * ppu}
       y={a.y * ppu}
       rotation={angleDeg}

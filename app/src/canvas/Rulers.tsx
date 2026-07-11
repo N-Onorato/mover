@@ -3,6 +3,7 @@ import {
   gridSpacingPx,
   gridTickPositions,
   imperialFootInchTicks,
+  isFootInchRuler,
   isMajorTick,
   labelStepMultiplier,
 } from '../utils/gridRuler'
@@ -56,7 +57,7 @@ export function Rulers({
   const leftRef = useRef<HTMLCanvasElement>(null)
   const topWidth = Math.max(0, width - RULER_THICKNESS)
   const leftHeight = Math.max(0, height - RULER_THICKNESS)
-  const useFootInches = units === 'imperial' && rulerMode === 'feet-inches'
+  const useFootInches = isFootInchRuler(units, rulerMode)
 
   const { spacingPx, labelSpacingPx } = useMemo(() => {
     const spacingPx = gridSpacingPx(gridSize, zoom, pixelsPerUnit)

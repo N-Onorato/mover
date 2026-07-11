@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { Layer, Line, Circle } from 'react-konva'
-import { gridSpacingPx, gridTickPositions, imperialFootInchTicks } from '../../utils/gridRuler'
+import { gridSpacingPx, gridTickPositions, imperialFootInchTicks, isFootInchRuler } from '../../utils/gridRuler'
 import type { UnitSystem } from '../../utils/units'
 import type { ProjectSettings } from '../../types/project'
 
@@ -33,7 +33,7 @@ const FOOT_LINE_COLOR = '#2a2a2a'
 const INCH_LINE_COLOR = '#33405a'
 
 export function GridLayer({ pixelsPerUnit, gridSize, viewX, viewY, zoom, width, height, units, rulerMode }: Props) {
-  const useFootInches = units === 'imperial' && rulerMode === 'feet-inches'
+  const useFootInches = isFootInchRuler(units, rulerMode)
   const spacingPx = gridSpacingPx(gridSize, zoom, pixelsPerUnit)
 
   // Visible world bounds (in stage-local pixel coords, before pan)

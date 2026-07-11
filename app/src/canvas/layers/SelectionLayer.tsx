@@ -120,7 +120,6 @@ export function SelectionLayer({ pixelsPerUnit, units }: Props) {
       wallLabels.push(
         <WallLengthLabel
           key={`seg-${i}`}
-          keyId={`seg-${i}`}
           a={points[i]}
           b={points[i + 1]}
           ppu={ppu}
@@ -135,7 +134,6 @@ export function SelectionLayer({ pixelsPerUnit, units }: Props) {
       wallLabels.push(
         <WallLengthLabel
           key="ghost"
-          keyId="ghost"
           a={points[points.length - 1]}
           b={cursor}
           ppu={ppu}

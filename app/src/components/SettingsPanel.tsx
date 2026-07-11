@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useProjectStore } from '../store/projectStore'
-import { useHistoryStore } from '../store/historyStore'
 import { formatLength, parseLength } from '../utils/units'
+import { UndoableField } from './PropertiesPanel'
 import styles from './SettingsPanel.module.css'
 
 interface SettingsPanelProps {
@@ -13,22 +13,17 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
   const defaultWallThickness = useProjectStore((s) => s.project.settings.defaultWallThickness)
   const updateSettings = useProjectStore((s) => s.updateSettings)
 
-  const [wallThicknessInput, setWallThicknessInput] = useState(defaultWallThickness.toFixed(2))
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    setWallThicknessInput(defaultWallThickness.toFixed(2))
-  }, [defaultWallThickness])
-
-  function commitWallThickness() {
-    const result = parseLength(wallThicknessInput, units)
+  function commitWallThickness(raw: string) {
+    const result = parseLength(raw, units)
     if (!result.ok) {
       setError(result.error)
-      return
+      return false
     }
     setError(null)
-    useHistoryStore.getState().pushSnapshot(useProjectStore.getState().project)
     updateSettings({ defaultWallThickness: result.value })
+    return true
   }
 
   return (
@@ -43,19 +38,12 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
         <div className={styles.body}>
           <div className={styles.section}>
             <div className={styles.sectionTitle}>Walls</div>
-            <label className={styles.field}>
-              <span className={styles.fieldLabel}>Default wall thickness (new rooms)</span>
-              <input
-                className={styles.input}
-                type="text"
-                value={wallThicknessInput}
-                onChange={(e) => setWallThicknessInput(e.target.value)}
-                onBlur={commitWallThickness}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') e.currentTarget.blur()
-                }}
-              />
-            </label>
+            <UndoableField
+              label="Default wall thickness (new rooms)"
+              type="text"
+              value={defaultWallThickness.toFixed(2)}
+              onCommit={commitWallThickness}
+            />
             <div className={styles.hint}>{formatLength(defaultWallThickness, units)}</div>
             {error && <div className={styles.error}>{error}</div>}
             <div className={styles.hint}>

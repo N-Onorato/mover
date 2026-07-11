@@ -4,6 +4,7 @@ import { useUIStore } from '../../store/uiStore'
 import { useProjectStore } from '../../store/projectStore'
 import { useHistoryStore } from '../../store/historyStore'
 import { distance } from '../../utils/geometry'
+import { isDoubleClick } from '../../utils/doubleClick'
 
 const CLOSE_THRESHOLD_PX = 14
 
@@ -40,7 +41,7 @@ export const RoomTool: ToolHandlers = {
     const pts = drawingState.points
 
     // Double-click: close if we have enough points
-    if (now - lastClickMs < 300 && pts.length >= 3) {
+    if (isDoubleClick(lastClickMs, now) && pts.length >= 3) {
       commitRoom(pts)
       lastClickMs = 0
       return

@@ -325,6 +325,264 @@ Acceptance criteria:
 - Any stale persisted `activeTool: 'furniture'` from an old saved session
   falls back to `'select'` rather than erroring.
 
+## Group F — Deferred from the 2026-07-11 cleanup pass
+
+Source: `/simplify` review of Group E's diff (2026-07-11). These were flagged
+but intentionally not fixed in that pass because each needs a real design
+decision or touches every tool, not just the reviewed diff.
+
+### F1. Per-room re-render/recompute cost during room drag
+**Priority: P3**
+
+`RoomLayer.tsx` subscribes the whole layer to `dragState`
+(`const dragState = useUIStore((s) => s.dragState)`), which is a new object
+on every `pointermove` during a wall/vertex/room drag. Because the component
+maps over all rooms in a single `rooms.filter().map()` body, every room in
+the project — not just the one being dragged — recomputes `flatPoints`,
+`polygonBoundingBox`, and (when wall labels are on) per-wall
+distance/angle/offset trig on every frame of the drag.
+
+Acceptance criteria:
+- Only the room(s) actually being dragged re-render/recompute on
+  `pointermove`; unrelated rooms do not re-run point/label math during
+  someone else's drag.
+- One viable approach: split each room into its own child component with a
+  per-room `dragState` selector (e.g.
+  `(s) => s.dragState?.roomId === room.id ? s.dragState.currentPoints : undefined`)
+  so Zustand only re-renders the affected room — but pick whatever approach
+  keeps `RoomLayer.tsx` from doing O(rooms) work per drag frame.
+- Manually verified: dragging one wall in a project with many rooms doesn't
+  visibly regress frame rate, and rooms not involved in the drag don't
+  re-render (checked via React DevTools profiler or equivalent).
+
+### F2. Room-drag pointer-move materializes full point arrays every frame
+**Priority: P3**
+
+Related to F1. `SelectTool.ts`'s room-drag `onPointerMove` branch
+(`nextById[id] = orig.map((p) => ({ x: p.x + dx, y: p.y + dy }))`) rebuilds a
+brand-new points array for every selected room on every pointer-move —
+O(rooms × points) allocations per frame for a large marquee-selected set.
+
+Acceptance criteria:
+- Live room-drag preview no longer allocates a full translated-points array
+  per room per frame; e.g. `dragState` stores just `(dx, dy)` during the
+  drag and the render path (tied to F1's per-room component) derives
+  translated points lazily only for the room(s) currently being drawn.
+- Final commit on pointer-up still produces the same translated points as
+  today (no behavior change, only fixes the intermediate allocation).
+
+### F3. `ToolHandlers` doesn't carry pointer modifiers or the real pointer-up position
+**Priority: P2**
+
+`SelectTool.ts:20-41` tracks `shiftHeld` via its own `window.addEventListener`
+at module scope, and separately tracks `lastWorldPt`/`dragAnchorWorld` as
+module-level `let`s, because `ToolHandlers.onPointerDown/Move/Up`
+(`SelectTool.ts:7-13`) doesn't receive keyboard-modifier state, and
+`LayoutCanvas.tsx`'s mouse-up handler calls `onPointerUp({x:0,y:0}, ppu)`
+instead of forwarding the real pointer position. This is a workaround layered
+on the shared tool-dispatch mechanism rather than a fix to it, and the shadow
+state has no reset-on-unmount and isn't visible to other tools that might
+need the same info later (e.g. a shift-constrain on a future tool).
+
+Acceptance criteria:
+- `ToolHandlers` methods (or a `PointerEvent`-like payload) carry modifier
+  flags (at least Shift) so tools don't need their own
+  `window.addEventListener`.
+- `LayoutCanvas.tsx`'s mouse-up handler passes the real world point (it
+  already computes one via its existing `getWorldPoint` helper) into
+  `onPointerUp` instead of `{x:0,y:0}`.
+- `SelectTool.ts`'s `mode`/`dragAnchorWorld` move into `useUIStore`'s
+  existing `dragState`/interaction state instead of living as module-level
+  `let`s, so drag state is inspectable from the store like everything else.
+- All existing select-tool behaviors (marquee shift-add, wall/vertex/room
+  drag, double-click vertex insertion) continue to work unchanged — this is
+  a refactor of *how* the state is carried, not a behavior change.
+
+### F4. Shared pointer-to-world conversion special-cases one tool's state
+**Priority: P3**
+
+`LayoutCanvas.tsx:101-103` computes `isCalibratingImage` by reaching into
+`ImageTool`'s private `drawingState.kind === 'calibration'` value to decide
+whether to suppress grid snap for that click. `getWorldPoint` is shared by
+every tool, so this hardcodes one tool's internal state machine into
+common infrastructure; a future tool that also wants raw (unsnapped)
+coordinates would have to grow the same if-chain.
+
+Acceptance criteria:
+- Each `ToolHandlers` implementation declares whether it wants snapped or
+  raw pointer coordinates (e.g. a `wantsRawPointer(): boolean` method or
+  static flag on the tool), and `getWorldPoint` consults the active tool
+  generically instead of special-casing `'image'` + `'calibration'`.
+- B1's calibration behavior (raw, unsnapped coordinates during calibration)
+  is unaffected — this only changes how that requirement is expressed, not
+  the behavior.
+
+### F5. `load.ts` settings migration is hand-rolled per field
+**Priority: P3**
+
+`io/load.ts` patches missing `ProjectSettings` fields (currently just
+`rulerMode`) with ad hoc `if (settings.field === undefined) settings.field =
+default` checks on an untyped `Record<string, unknown>`, directly above a
+`// TODO: schema validation and migrations` comment that already acknowledges
+this is a stopgap. E2 added a second settings field
+(`defaultWallThickness`) the same way, so this pattern is starting to repeat.
+
+Acceptance criteria:
+- Once a project needs its second or third such default-backfill (this may
+  already be true — check current `load.ts`), replace the one-off
+  `if (x === undefined)` checks with a small ordered list of migration steps
+  (e.g. `migrations: ((settings) => void)[]`) applied on load, so adding a
+  new settings field with a default doesn't mean adding another inline
+  special case.
+- Existing saved projects missing newer settings fields still load with the
+  documented defaults (no regression for old `.mover.json` files).
+
+## Group G — Direct manipulation & polish, round 3
+
+Source: root `notes.md`, third hands-on pass through the app (2026-07-11), after
+Group E landed. Grounded against the current `app/src` implementation (verified
+2026-07-11, working tree ahead of `97bce22`).
+
+### G1. Wall length label color/weight and full clearance outside the wall
+**Priority: P2**
+
+Depends on / revisits E4. `WallLengthLabel.tsx` renders at `fontSize={15}`
+(already bumped by E4) but the caller supplies the color: `RoomLayer.tsx:69`
+hardcodes `fill="#8fa"` (green) and `SelectionLayer.tsx`'s in-progress preview
+hardcodes `fill="#4a9eff"` / `"#ffb400"` (blue/amber) — neither is the "large
+bold black" the note asks for, and neither sets `fontStyle`. Separately,
+`wallLabelOffsetY` (`utils/wallLabelOffset.ts:34`) only offsets by
+`wallThickness/2 + LABEL_MARGIN_PX (10)` — enough to clear the rendered stroke,
+but it doesn't add anything for the label's *own* rendered height
+(`fontSize={15}` ⇒ ~18-20px glyph box), so at typical zoom the text's far edge
+can still fall back across the wall centerline even though its anchor point is
+technically outside it.
+
+Acceptance criteria:
+- Label color changed to a bold, high-contrast neutral (e.g. near-black or the
+  theme's text color) and made consistent across `RoomLayer.tsx` and
+  `SelectionLayer.tsx`'s `WallLengthLabel` usages, replacing the current
+  green/blue hardcodes.
+- `fontStyle="bold"` (or equivalent) added to `WallLengthLabel`.
+- `wallLabelOffsetY` (or its caller) accounts for the label's own rendered
+  height in addition to wall thickness + margin, so the whole glyph box clears
+  the wall, not just its anchor point.
+- Manually verified at low/medium/high zoom and with thin/thick walls that no
+  part of the label overlaps the rendered stroke.
+
+### G2. Toolbar button to toggle snap-to-grid
+**Priority: P2**
+
+`Toolbar.tsx` (the tool buttons + zoom row) has no snap control today — the
+only toggle is `MenuBar.tsx`'s View ▸ "Snap to Grid" entry
+(`MenuBar.tsx:176-183`), which requires opening a dropdown for something used
+constantly while drawing.
+
+Acceptance criteria:
+- A toggle button added to `Toolbar.tsx`, positioned with the zoom controls
+  (top right), bound to `project.settings.snapToGrid` via the existing
+  `toggleSnapToGrid()` action — same store field `MenuBar` already reads, so
+  both stay in sync automatically.
+- Active/pressed visual state matches the existing `styles.active` convention
+  used for tool selection.
+- Matches `MenuBar`'s current behavior of pushing an undo snapshot on toggle
+  (`MenuBar.tsx:180`), so undo/redo history isn't fragmented depending on
+  which control was used.
+
+### G3. Modifier key to temporarily invert snap-to-grid
+**Priority: P2**
+
+Depends on F3 (tool modifier plumbing). Snap is decided in one place —
+`LayoutCanvas.tsx`'s `getWorldPoint` (`LayoutCanvas.tsx:94-108`) — purely from
+`settings.snapToGrid`; there's no live modifier check. The only modifier
+tracked anywhere is Shift, and it's tracked the F3-flagged way: a
+`SelectTool.ts`-local `window.addEventListener('keydown'/'keyup')`
+(`SelectTool.ts:24-32`) used only for marquee shift-add, invisible to
+`getWorldPoint`.
+
+Acceptance criteria:
+- Holding a modifier key inverts the effective snap setting for that pointer
+  event (snap on → off, off → on) for both live preview and final placement.
+  Recommend Ctrl (not Shift) to avoid overloading the key `SelectTool` already
+  uses for marquee shift-add — document whichever is chosen.
+- Implemented by tracking the modifier directly in `LayoutCanvas` (the shared
+  choke point for the snap decision) rather than adding another tool-local
+  `window` listener, per F3's guidance not to repeat that pattern.
+- Releasing the key restores normal snap behavior on the very next pointer
+  event.
+- If Shift is chosen instead of Ctrl: confirm select-tool marquee shift-add
+  still behaves correctly when combined with the inverted snap (marquee drags
+  aren't snapped today regardless, so no actual behavior conflict expected —
+  verify this holds).
+
+### G4. Prompt for image origin during reference image import
+**Priority: P2**
+
+`startImageImport` (`ImageTool.ts:12-45`) always places the new image at
+`x: 0, y: 0` and immediately enters calibration mode
+(`setDrawingState({ kind: 'calibration', ... })`), which only ever sets scale
+(`finishCalibration`, `ImageTool.ts:52-85`). Nothing lets the user say where
+the image's origin (outer top-left, per the note) should land in world space.
+
+Acceptance criteria:
+- After import (before or after calibration — pick one and document it), the
+  user is prompted to click a canvas point that becomes the image's outer
+  top-left origin; the image's `x`/`y` is set from that click.
+- Composes with the existing calibration step: calibration keeps setting
+  scale only, this step only sets translation.
+- Escape cancels the origin step the same way calibration already cancels
+  (`ImageTool.ts:104-106`), leaving the image at the default `0,0`.
+- Suggested implementation: a new `drawingState.kind` (e.g. `'imageOrigin'`)
+  mirroring the existing `'calibration'` state shape.
+
+### G5. Selection hit-test state desyncs during operations
+**Priority: P1**
+
+Note: "selection hitboxes become unsynced during operations and only seem to
+be fixed by changing zoom levels." Prime suspect is the exact pattern F3
+already flagged as tech debt: `SelectTool.ts` keeps `mode`, `lastWorldPt`,
+`dragAnchorWorld`, and `lastClickEdge` as module-level `let`s
+(`SelectTool.ts:39-47`) instead of store state, with no reset on unmount and
+no guarantee they stay consistent with the component tree across re-renders —
+changing zoom forces enough re-renders/remounts to incidentally reset them,
+which matches the reported "only fixed by changing zoom" symptom.
+
+Acceptance criteria:
+- Root cause confirmed (not just assumed) and fixed — most likely resolved as
+  part of F3's refactor moving this state into `uiStore`, but treat this as
+  its own bug until verified, since F3 is not yet scheduled/landed.
+- Manually verified: perform a wall drag, a vertex drag, and a marquee select
+  back-to-back at a single fixed zoom level (no zoom change in between) and
+  confirm every hit test stays accurate throughout.
+- If F3 lands first, re-verify this doesn't reproduce before closing it as a
+  duplicate; if F3 is deferred, this needs its own targeted fix.
+
+### G6. Vertex indicators on rooms
+**Priority: P1**
+
+Note: "difficult to click and drag vertices I can't find." Confirmed: once a
+room is committed, nothing renders its vertices. `HighlightLayer.tsx` (the
+selected-room overlay) draws only a dashed outline
+(`HighlightLayer.tsx:30-37`) and the selected-wall highlight
+(`HighlightLayer.tsx:38-40`) — no vertex markers. `RoomLayer.tsx` doesn't
+render any either. The only vertex `Circle`s anywhere are in
+`SelectionLayer.tsx`'s in-progress room-drawing preview
+(`SelectionLayer.tsx:205-213`), which only exists before a room is closed.
+
+Acceptance criteria:
+- Decide always-visible vs. selected-room-only (the note offers both; pick
+  one and document it — selected-only is the smaller change since
+  `HighlightLayer` already scopes to `selectedRoom`).
+- Small circle marker rendered at each vertex, sized/positioned consistently
+  with E1's vertex hit-test threshold so the visible target matches the
+  actual grabbable area.
+- Rendered using the same `ppu` transform as `RoomLayer`/`HighlightLayer`.
+- Uses a fill distinct from the existing selected-wall highlight color
+  (`#ff5a36`) so the two affordances don't read as the same thing.
+- Locked rooms (not draggable per existing checks) should not show vertex
+  markers, or should show them visually distinct as non-interactive — pick
+  one and document it.
+
 ## Suggested build order
 
 1. **A1** unit parsing (unblocks B1's prompt replacement and D2's sqft display)
@@ -343,3 +601,12 @@ Acceptance criteria:
 13. **E3b** outer-shell vertex insertion (extends C2's vertex-drag target set)
 14. **E3** interior dividing walls (bigger data-model lift; do after E3b/E2/E4
     since it reuses their thickness/label/drag conventions)
+15. **G5** hitbox desync bug (P1, high-annoyance correctness bug — investigate
+    whether F3 alone fixes it before scheduling F3)
+16. **G6** vertex indicators (P1, directly unblocks the "can't find the
+    vertex" complaint that C2/E1 dragging depends on being discoverable)
+17. **G2** toolbar snap toggle (small, high annoyance-to-fix ratio)
+18. **G1** wall label color/weight/offset (revisit of D1/E4 styling, same area)
+19. **G3** modifier-key snap override (needs F3's modifier plumbing to avoid
+    another one-off `window` listener)
+20. **G4** reference-image origin prompt (isolated, touches only `ImageTool.ts`)

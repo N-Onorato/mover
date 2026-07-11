@@ -53,6 +53,11 @@ export function distanceToSegment(pt: Point, a: Point, b: Point): number {
   return distance(pt, closest)
 }
 
+export function pointsEqual(a: Point[], b: Point[]): boolean {
+  if (a.length !== b.length) return false
+  return a.every((p, i) => p.x === b[i].x && p.y === b[i].y)
+}
+
 export function rectPoints(x: number, y: number, w: number, h: number): Point[] {
   return [
     { x, y },
