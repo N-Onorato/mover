@@ -19,11 +19,19 @@ export function RoomLayer({ pixelsPerUnit }: Props) {
   return (
     <Layer>
       {rooms.filter((r) => r.visible).map((room) => {
-        // C2: while this room's wall/vertex is being dragged, render the live
-        // preview points instead of the committed room.points. The store
-        // isn't mutated until pointer-up.
-        const effectivePoints: Point[] =
-          dragState && dragState.roomId === room.id ? dragState.currentPoints : room.points
+        // C2/E5: while this room's wall/vertex/body is being dragged, render
+        // the live preview points instead of the committed room.points. The
+        // store isn't mutated until pointer-up. Room-body drags (E5) can
+        // move multiple rooms at once, so they're keyed by room id instead
+        // of a single roomId field.
+        let effectivePoints: Point[] = room.points
+        if (dragState) {
+          if (dragState.kind === 'room') {
+            effectivePoints = dragState.currentPointsById[room.id] ?? room.points
+          } else if (dragState.roomId === room.id) {
+            effectivePoints = dragState.currentPoints
+          }
+        }
 
         const flatPoints = effectivePoints.flatMap((p) => [p.x * pixelsPerUnit, p.y * pixelsPerUnit])
         const bb = polygonBoundingBox(effectivePoints)

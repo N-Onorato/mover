@@ -51,7 +51,14 @@ export interface VertexDragState {
   currentPoints: Point[]
 }
 
-export type DragState = WallDragState | VertexDragState
+export interface RoomDragState {
+  kind: 'room'
+  roomIds: string[] // all rooms being dragged together (single room, or a multi-select)
+  originalPointsById: Record<string, Point[]> // room.points snapshot at drag start, keyed by room id
+  currentPointsById: Record<string, Point[]> // live-updated preview during drag, keyed by room id
+}
+
+export type DragState = WallDragState | VertexDragState | RoomDragState
 
 interface UIStore {
   activeTool: Tool
