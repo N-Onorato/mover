@@ -29,12 +29,39 @@ export interface SelectedWall {
   edgeIndex: number
 }
 
+export interface MarqueeState {
+  start: Point // world space
+  end: Point // world space
+  additive: boolean // shift-drag: add to existing selection instead of replacing it
+}
+
+export interface WallDragState {
+  kind: 'wall'
+  roomId: string
+  edgeIndex: number
+  originalPoints: Point[] // room.points snapshot at drag start
+  currentPoints: Point[] // live-updated preview during drag
+}
+
+export interface VertexDragState {
+  kind: 'vertex'
+  roomId: string
+  vertexIndex: number
+  originalPoints: Point[]
+  currentPoints: Point[]
+}
+
+export type DragState = WallDragState | VertexDragState
+
 interface UIStore {
   activeTool: Tool
   selectedIds: string[]
   selectedWall: SelectedWall | null
   showGrid: boolean
   drawingState: DrawingState | null
+  marquee: MarqueeState | null
+  dragState: DragState | null
+  showWallLabels: boolean
   showLayers: {
     referenceImages: boolean
     rooms: boolean
@@ -56,9 +83,53 @@ interface UIStore {
   setSelectedWall: (wall: SelectedWall | null) => void
   toggleGrid: () => void
   setDrawingState: (state: DrawingState | null) => void
+  setMarquee: (marquee: MarqueeState | null) => void
+  setDragState: (dragState: DragState | null) => void
+  toggleWallLabels: () => void
   toggleLayerVisibility: (layer: keyof UIStore['showLayers']) => void
   toggleLayerLock: (layer: keyof UIStore['lockedLayers']) => void
   setView: (view: ViewState) => void
+}
+
+/** Idle-state label shown for each tool when no operation is in progress. */
+export const TOOL_LABELS: Record<Tool, string> = {
+  select: 'Select',
+  room: 'Room',
+  furniture: 'Furniture',
+  image: 'Image',
+  annotation: 'Annotation',
+}
+
+/**
+ * Derives a short status-bar hint for the active tool, taking any
+ * in-progress drawingState into account. Purely a read-only helper over
+ * existing state — safe to call from any component.
+ */
+export function getToolHint(activeTool: Tool, drawingState: DrawingState | null): string {
+  if (drawingState?.kind === 'room') {
+    return drawingState.points.length < 3
+      ? 'Room: click to add point'
+      : 'Room: click to add point, double-click or click first point to close'
+  }
+  if (drawingState?.kind === 'calibration') {
+    return drawingState.points.length === 0
+      ? 'Calibration: click first point'
+      : 'Calibration: click second point'
+  }
+  switch (activeTool) {
+    case 'select':
+      return 'Select: click to select, drag to marquee-select'
+    case 'room':
+      return 'Room: click to start drawing'
+    case 'furniture':
+      return 'Furniture: click to place item'
+    case 'image':
+      return 'Image: import a photo, then calibrate its scale'
+    case 'annotation':
+      return 'Annotation: click to place label'
+    default:
+      return TOOL_LABELS[activeTool] ?? ''
+  }
 }
 
 export const useUIStore = create<UIStore>((set) => ({
@@ -67,6 +138,9 @@ export const useUIStore = create<UIStore>((set) => ({
   selectedWall: null,
   showGrid: true,
   drawingState: null,
+  marquee: null,
+  dragState: null,
+  showWallLabels: true,
   showLayers: {
     referenceImages: true,
     rooms: true,
@@ -82,13 +156,23 @@ export const useUIStore = create<UIStore>((set) => ({
   view: { x: 0, y: 0, scale: 1 },
 
   setActiveTool: (tool) =>
-    set({ activeTool: tool, selectedIds: [], selectedWall: null, drawingState: null }),
+    set({
+      activeTool: tool,
+      selectedIds: [],
+      selectedWall: null,
+      drawingState: null,
+      marquee: null,
+      dragState: null,
+    }),
   setSelection: (ids) => set({ selectedIds: ids, selectedWall: null }),
   addToSelection: (id) => set((s) => ({ selectedIds: [...s.selectedIds, id] })),
   clearSelection: () => set({ selectedIds: [], selectedWall: null }),
   setSelectedWall: (wall) => set({ selectedWall: wall }),
   toggleGrid: () => set((s) => ({ showGrid: !s.showGrid })),
   setDrawingState: (state) => set({ drawingState: state }),
+  setMarquee: (marquee) => set({ marquee }),
+  setDragState: (dragState) => set({ dragState }),
+  toggleWallLabels: () => set((s) => ({ showWallLabels: !s.showWallLabels })),
   toggleLayerVisibility: (layer) =>
     set((s) => ({
       showLayers: { ...s.showLayers, [layer]: !s.showLayers[layer] },

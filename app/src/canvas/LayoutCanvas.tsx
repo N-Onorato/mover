@@ -100,7 +100,9 @@ export function LayoutCanvas() {
     const stageLocalX = pos.x - view.x
     const stageLocalY = pos.y - view.y
     const worldRaw: Point = { x: stageLocalX / pixelsPerUnit, y: stageLocalY / pixelsPerUnit }
-    if (settings.snapToGrid) {
+    const isCalibratingImage =
+      activeTool === 'image' && useUIStore.getState().drawingState?.kind === 'calibration'
+    if (settings.snapToGrid && !isCalibratingImage) {
       const gridSpacing = adaptiveGridSize(settings.gridSize, view.scale)
       return snapToGrid(worldRaw, gridSpacing)
     }

@@ -1,8 +1,9 @@
-import { Layer, Line, Circle, Text } from 'react-konva'
+import { Layer, Line, Circle, Text, Rect } from 'react-konva'
 import { useUIStore } from '../../store/uiStore'
-import { distance } from '../../utils/geometry'
+import { distance, angle } from '../../utils/geometry'
 import { formatLength } from '../../utils/units'
 import type { UnitSystem } from '../../utils/units'
+import type { Point } from '../../types/project'
 
 interface Props {
   pixelsPerUnit: number
@@ -11,7 +12,7 @@ interface Props {
 
 const CLOSE_THRESHOLD_PX = 14
 
-function CalibrationPreview({ pixelsPerUnit, units }: Props) {
+function CalibrationPreviewContents({ pixelsPerUnit, units }: Props) {
   const drawingState = useUIStore((s) => s.drawingState)
   if (!drawingState || drawingState.kind !== 'calibration') return null
   const { points, cursor } = drawingState
@@ -24,7 +25,7 @@ function CalibrationPreview({ pixelsPerUnit, units }: Props) {
   const worldDist = distance(first, end)
 
   return (
-    <Layer listening={false}>
+    <>
       <Line
         points={[first.x * ppu, first.y * ppu, end.x * ppu, end.y * ppu]}
         stroke="#ffb400"
@@ -42,21 +43,79 @@ function CalibrationPreview({ pixelsPerUnit, units }: Props) {
         fontSize={12}
         listening={false}
       />
-    </Layer>
+    </>
+  )
+}
+
+// D1: wall length label centered on a segment, rotated to match its angle.
+function WallLengthLabel({
+  a,
+  b,
+  ppu,
+  units,
+  keyId,
+}: {
+  a: Point
+  b: Point
+  ppu: number
+  units: UnitSystem
+  keyId: string
+}) {
+  const lenWorld = distance(a, b)
+  if (lenWorld <= 0) return null
+  const angleDeg = angle(a, b)
+  return (
+    <Text
+      key={keyId}
+      x={a.x * ppu}
+      y={a.y * ppu}
+      rotation={angleDeg}
+      width={lenWorld * ppu}
+      align="center"
+      text={formatLength(lenWorld, units)}
+      fontSize={11}
+      fill="#4a9eff"
+      offsetY={14}
+      listening={false}
+    />
   )
 }
 
 export function SelectionLayer({ pixelsPerUnit, units }: Props) {
   const drawingState = useUIStore((s) => s.drawingState)
+  const marquee = useUIStore((s) => s.marquee)
+  const showWallLabels = useUIStore((s) => s.showWallLabels)
+  const ppu = pixelsPerUnit
+
+  // Marquee (C1): live drag rectangle rendered on top of everything else.
+  const marqueeRect = marquee ? (
+    <Rect
+      x={Math.min(marquee.start.x, marquee.end.x) * ppu}
+      y={Math.min(marquee.start.y, marquee.end.y) * ppu}
+      width={Math.abs(marquee.end.x - marquee.start.x) * ppu}
+      height={Math.abs(marquee.end.y - marquee.start.y) * ppu}
+      fill="rgba(74,158,255,0.12)"
+      stroke="#4a9eff"
+      strokeWidth={1}
+      dash={[4, 4]}
+      listening={false}
+    />
+  ) : null
 
   if (drawingState?.kind === 'calibration') {
-    return <CalibrationPreview pixelsPerUnit={pixelsPerUnit} units={units} />
+    return (
+      <Layer listening={false}>
+        <CalibrationPreviewContents pixelsPerUnit={pixelsPerUnit} units={units} />
+        {marqueeRect}
+      </Layer>
+    )
   }
 
-  if (!drawingState || drawingState.kind !== 'room') return <Layer />
+  if (!drawingState || drawingState.kind !== 'room') {
+    return <Layer listening={false}>{marqueeRect}</Layer>
+  }
 
   const { points, cursor } = drawingState
-  const ppu = pixelsPerUnit
 
   // Convert world points to flat pixel array for Konva
   const flatCommitted = points.flatMap((p) => [p.x * ppu, p.y * ppu])
@@ -69,6 +128,29 @@ export function SelectionLayer({ pixelsPerUnit, units }: Props) {
     firstPx &&
     points.length >= 3 &&
     distance(cursorPx, firstPx) <= CLOSE_THRESHOLD_PX
+
+  // D1: wall length labels while drawing a room in progress - one per
+  // committed segment, plus the live ghost segment to the cursor.
+  const wallLabels: React.ReactNode[] = []
+  if (showWallLabels) {
+    for (let i = 0; i < points.length - 1; i++) {
+      wallLabels.push(
+        <WallLengthLabel key={`seg-${i}`} keyId={`seg-${i}`} a={points[i]} b={points[i + 1]} ppu={ppu} units={units} />,
+      )
+    }
+    if (cursor && points.length >= 1 && !nearClose) {
+      wallLabels.push(
+        <WallLengthLabel
+          key="ghost"
+          keyId="ghost"
+          a={points[points.length - 1]}
+          b={cursor}
+          ppu={ppu}
+          units={units}
+        />,
+      )
+    }
+  }
 
   return (
     <Layer listening={false}>
@@ -149,6 +231,9 @@ export function SelectionLayer({ pixelsPerUnit, units }: Props) {
           listening={false}
         />
       )}
+
+      {wallLabels}
+      {marqueeRect}
     </Layer>
   )
 }

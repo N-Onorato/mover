@@ -5,6 +5,7 @@ import { Toolbar } from './components/Toolbar'
 import { CatalogPanel } from './components/CatalogPanel'
 import { LayerPanel } from './components/LayerPanel'
 import { PropertiesPanel } from './components/PropertiesPanel'
+import { StatusBar } from './components/StatusBar'
 import { LayoutCanvas } from './canvas/LayoutCanvas'
 import { useProjectStore } from './store/projectStore'
 import { loadFromLocalStorage } from './io/load'
@@ -58,6 +59,7 @@ export default function App() {
           </Panel>
         </Group>
       </div>
+      <StatusBar />
     </div>
   )
 }

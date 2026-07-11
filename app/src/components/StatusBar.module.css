@@ -1,0 +1,43 @@
+.statusBar {
+  display: flex;
+  align-items: center;
+  height: 26px;
+  padding: 0 10px;
+  background: #161616;
+  border-top: 1px solid #333;
+  color: #ccc;
+  font-size: 12px;
+  flex-shrink: 0;
+  user-select: none;
+  gap: 8px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.tool {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tool strong {
+  color: #eee;
+  font-weight: 600;
+}
+
+.hint {
+  color: #888;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.area {
+  color: #ccc;
+  flex-shrink: 0;
+}

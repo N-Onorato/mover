@@ -1,7 +1,10 @@
 import { Fragment } from 'react'
 import { Layer, Line, Text } from 'react-konva'
 import { useProjectStore } from '../../store/projectStore'
-import { polygonBoundingBox } from '../../utils/geometry'
+import { useUIStore } from '../../store/uiStore'
+import { polygonBoundingBox, distance, angle } from '../../utils/geometry'
+import { formatLength } from '../../utils/units'
+import type { Point } from '../../types/project'
 
 interface Props {
   pixelsPerUnit: number
@@ -9,12 +12,21 @@ interface Props {
 
 export function RoomLayer({ pixelsPerUnit }: Props) {
   const rooms = useProjectStore((s) => s.project.rooms)
+  const units = useProjectStore((s) => s.project.settings.units)
+  const dragState = useUIStore((s) => s.dragState)
+  const showWallLabels = useUIStore((s) => s.showWallLabels)
 
   return (
     <Layer>
       {rooms.filter((r) => r.visible).map((room) => {
-        const flatPoints = room.points.flatMap((p) => [p.x * pixelsPerUnit, p.y * pixelsPerUnit])
-        const bb = polygonBoundingBox(room.points)
+        // C2: while this room's wall/vertex is being dragged, render the live
+        // preview points instead of the committed room.points. The store
+        // isn't mutated until pointer-up.
+        const effectivePoints: Point[] =
+          dragState && dragState.roomId === room.id ? dragState.currentPoints : room.points
+
+        const flatPoints = effectivePoints.flatMap((p) => [p.x * pixelsPerUnit, p.y * pixelsPerUnit])
+        const bb = polygonBoundingBox(effectivePoints)
         const cx = (bb.x + bb.width / 2) * pixelsPerUnit
         const cy = (bb.y + bb.height / 2) * pixelsPerUnit
         return (
@@ -29,6 +41,29 @@ export function RoomLayer({ pixelsPerUnit }: Props) {
             {room.name && (
               <Text x={cx} y={cy} text={room.name} align="center" offsetX={40} offsetY={8} fill="#ddd" fontSize={13} />
             )}
+            {/* D1: per-wall length labels, toggleable via uiStore.showWallLabels */}
+            {showWallLabels &&
+              effectivePoints.map((a, i) => {
+                const b = effectivePoints[(i + 1) % effectivePoints.length]
+                const lenWorld = distance(a, b)
+                if (lenWorld <= 0) return null
+                const angleDeg = angle(a, b)
+                return (
+                  <Text
+                    key={`wall-label-${i}`}
+                    x={a.x * pixelsPerUnit}
+                    y={a.y * pixelsPerUnit}
+                    rotation={angleDeg}
+                    width={lenWorld * pixelsPerUnit}
+                    align="center"
+                    text={formatLength(lenWorld, units)}
+                    fontSize={11}
+                    fill="#8fa"
+                    offsetY={12}
+                    listening={false}
+                  />
+                )
+              })}
           </Fragment>
         )
       })}

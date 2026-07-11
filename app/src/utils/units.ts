@@ -114,3 +114,17 @@ export function parseLength(
 
   return { ok: false, error: `"${s}" is not a valid length (try 6", 7'3", or 72).` }
 }
+
+/**
+ * Formats an area given in world units^2 (in^2 for imperial, cm^2 for
+ * metric — same convention as the rest of the app) as a human-readable
+ * string in the active unit system's area unit (ft^2 or m^2).
+ */
+export function formatArea(value: number, units: UnitSystem): string {
+  if (units === 'metric') {
+    const sqm = value / 10000 // cm^2 -> m^2
+    return `${sqm.toFixed(1)} m²`
+  }
+  const sqft = value / 144 // in^2 -> ft^2
+  return `${sqft.toFixed(1)} ft²`
+}

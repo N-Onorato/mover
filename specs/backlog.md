@@ -156,6 +156,175 @@ Acceptance criteria:
 - Values are formatted consistently with `formatLength`/unit system already
   used elsewhere (no ad hoc formatting).
 
+## Group E — Direct manipulation & polish, round 2
+
+Source: root `notes.md`, second hands-on pass through the app (2026-07-11), after
+A-D above landed (marquee select, wall/vertex drag, wall labels, and the status
+bar are all present in the working tree as of this pass). Grounded against the
+current `app/src` implementation.
+
+### E1. Wall hit-test threshold ignores rendered wall thickness
+**Priority: P1**
+
+`SelectTool.ts:15-16` defines a flat `WALL_HIT_THRESHOLD_PX = 8`, used at
+`SelectTool.ts:57` (`thresholdWorld = WALL_HIT_THRESHOLD_PX / ppu`) regardless
+of how thick the wall is actually drawn (`RoomLayer.tsx:39`,
+`strokeWidth={room.wallThickness * pixelsPerUnit}`). When zoomed out, a thick
+wall's rendered stroke can be visually wider than the 8px hit corridor, and at
+high zoom the same fixed threshold can feel too generous relative to what's
+drawn — hence "hit box seems inconsistent."
+
+Acceptance criteria:
+- Hit threshold scales with the room's actual wall thickness in world units
+  (e.g. `max(WALL_HIT_THRESHOLD_PX, room.wallThickness * ppu / 2) / ppu`), so
+  the clickable corridor tracks what's drawn on screen at any zoom.
+- Manually verified: clicking directly on a rendered wall line selects it at
+  both 20% and 400% zoom.
+- Vertex threshold (`VERTEX_HIT_THRESHOLD_PX`) re-checked so corners of very
+  thick walls don't become harder to grab than the wall itself.
+
+### E2. Configurable wall thickness, defaulting to US standard
+**Priority: P1**
+
+`defaultWallThickness: 6` is hardcoded in `projectStore.ts:23` (inches) and
+applied to every new room via `RoomTool.ts:20`, but nothing in the UI lets a
+user see or change it — `PropertiesPanel.tsx`'s `RoomProperties` (lines 91-126)
+exposes Name/Width/Height only, and there is no project-settings panel
+anywhere in `app/src/components`.
+
+Acceptance criteria:
+- Default changes to 4.5" for imperial projects (standard 2x4 + drywall
+  interior wall) with a documented metric equivalent for `units: 'metric'`
+  projects.
+- A project settings surface (new panel or modal) exposes
+  `defaultWallThickness` as an editable field using A1's `parseLength`.
+- `RoomProperties` gains a per-room wall-thickness field so an individual
+  room can override the project default; changing the project default does
+  not retroactively change existing rooms.
+- New rooms drawn after changing the setting pick up the new default.
+
+### E3. Draw an interior (dividing) wall inside a room
+**Priority: P2**
+
+Clarified scope: this is about adding a new *internal* wall that subdivides a
+room's interior (e.g. splitting a great room into two, or partitioning off a
+closet, or a peninsula/pony wall that doesn't reach the far side) — not about
+reshaping the outer perimeter (see E3b). `Room` (`types/project.ts:30-39`) is
+currently a single closed polygon (`points: Point[]`) with no concept of a
+wall that doesn't lie on that boundary.
+
+Decided data model (2026-07-11): interior walls are a standalone entity, not
+a room-split. The room stays one polygon with one floor area (no change to
+D2's sqft calc); the wall is drawn/hit-tested independently. This was chosen
+specifically because partial (non-full-span) walls are in scope for v1 —
+splitting the parent `Room` polygon only works for walls that fully close off
+a new area, so it can't represent a pony wall or peninsula on its own.
+
+Acceptance criteria:
+- New type, e.g. `InteriorWall { id, roomId, a: Point, b: Point, thickness,
+  locked, visible }`, added to `types/project.ts` and to `Project` (a new
+  `interiorWalls: InteriorWall[]` array, parallel to `rooms`).
+- New tool or mode lets the user click a start point and an end point to
+  place the wall. Endpoints snap to the room's perimeter or to an existing
+  interior wall when the cursor is near one, but are not required to —
+  free-floating endpoints inside the room are valid (needed for
+  peninsulas/pony walls that don't reach the far side).
+- Default thickness matches E2's revised interior default (4.5"), overridable
+  per-wall the same way `Room.wallThickness` is.
+- The new wall renders with the same thickness/labeling conventions as
+  perimeter walls (reuses D1/E4's label rendering).
+- The new wall is selectable, draggable (extends C2 to handle
+  `InteriorWall` alongside `Room` edges/vertices), and deletable, and
+  participates in E1's hit-test sizing.
+- An interior wall inherits its parent room's `locked`/`visible` state (no
+  separate per-wall layer toggle in v1); it's rejected for placement/editing
+  when the parent room is locked, consistent with existing checks in
+  `SelectTool.ts`.
+- Deleting the parent room deletes its interior walls. Dragging (E5) or
+  resizing the parent room translates/scales interior wall endpoints along
+  with it, since both live in the same world coordinate space.
+- Placement is one undo step.
+
+### E3b. Insert a vertex into the outer room shell
+**Priority: P2**
+
+Distinct from E3 above — this is about adding a corner to the room's existing
+perimeter (e.g. to notch out an alcove), not adding an interior wall. Depends
+on C2 (wall/vertex drag), since the inserted vertex should immediately be
+draggable through that same path. No current code adds a vertex to an
+existing room — `RoomTool.ts` only builds rooms from scratch, and C2's
+vertex/wall drag in `SelectTool.ts` only repositions existing points.
+
+Acceptance criteria:
+- With a wall selected (`useUIStore().selectedWall`), an action (e.g.
+  double-click on the wall) inserts a new vertex at the clicked point,
+  splitting that edge of `Room.points` into two collinear segments.
+- The new vertex is draggable via the existing C2 vertex-drag path with no
+  additional code.
+- Insertion is one undo step (`pushSnapshot` before the mutation).
+- Rejected on locked rooms/layers, consistent with existing checks in
+  `SelectTool.ts`.
+
+### E4. Wall length labels: larger and offset outside the wall
+**Priority: P2**
+
+Depends on D1 (this replaces its label styling, not a new labels feature).
+Current labels sit on the wall centerline with only a small fixed pixel
+offset (`RoomLayer.tsx:52-64`: fontSize 11, `offsetY={12}`;
+`SelectionLayer.tsx:68-81`, the in-progress-drawing equivalent: fontSize 11,
+`offsetY={14}`) — the offset doesn't account for wall thickness or zoom, so
+labels tend to sit on or near the rendered stroke instead of clearly outside
+it.
+
+Acceptance criteria:
+- Font size increased (e.g. 14-16px) for legibility at typical zoom.
+- Offset is computed perpendicular to the wall, outward from the room
+  interior, and scales with `room.wallThickness * pixelsPerUnit` plus a fixed
+  margin, rather than a flat `offsetY` constant.
+- Fix applies to both `RoomLayer.tsx` (committed rooms) and
+  `SelectionLayer.tsx`'s `WallLengthLabel` (in-progress drawing) — these
+  currently duplicate the same rendering logic, so consider consolidating
+  into one shared component/util while fixing the offset.
+- Manually verified at low/medium/high zoom that labels read clearly outside
+  the wall and don't overlap the room name label.
+
+### E5. Click-and-drag an entire room
+**Priority: P1**
+
+`SelectTool.ts`'s room-body hit test (lines 110-119) only sets selection —
+it never starts a drag, and `DragState` (uiStore) only has `'wall' |
+'vertex'` kinds, no `'room'` kind to translate every point together.
+
+Acceptance criteria:
+- Pointer-down inside a room's fill (below the wall/vertex hit-test
+  priority already in place) followed by drag moves every point of the room
+  by the same delta, with a live preview via the existing
+  `dragState.currentPoints` pattern.
+- Pointer-up commits the moved points as one undo step, matching C2's
+  wall/vertex drag convention.
+- Respects grid snap the same way existing drag/draw operations do; blocked
+  for locked rooms/layers.
+- If multiple rooms are selected (via C1 marquee), dragging any one of them
+  moves all selected rooms together, preserving relative positions.
+
+### E6. Remove the redundant "Furniture" tool/tab
+**Priority: P3**
+
+`Toolbar.tsx:8` lists a `furniture` tool button, but `FurnitureTool.ts` is a
+complete no-op (all five handlers are empty bodies). The only working way to
+place furniture is drag-and-drop from `CatalogPanel.tsx` (sets
+`dataTransfer` on drag start) onto the canvas — the toolbar entry duplicates
+that without doing anything.
+
+Acceptance criteria:
+- `furniture` entry removed from `Toolbar.tsx`'s `TOOLS` list.
+- `FurnitureTool.ts` deleted along with its dispatch wiring (wherever
+  `activeTool === 'furniture'` is switched on, e.g. in `LayoutCanvas.tsx`).
+- Drag-and-drop placement from `CatalogPanel` verified unaffected (existing,
+  unrelated functionality).
+- Any stale persisted `activeTool: 'furniture'` from an old saved session
+  falls back to `'select'` rather than erroring.
+
 ## Suggested build order
 
 1. **A1** unit parsing (unblocks B1's prompt replacement and D2's sqft display)
@@ -165,3 +334,12 @@ Acceptance criteria:
 5. **C2** wall/vertex dragging
 6. **D1** wall length labels (natural follow-on to C2 — same drag interactions)
 7. **D2** status bar (pulls together tool state + sqft from C1/C2 work)
+8. **E6** remove redundant furniture tool (trivial, unblocks nothing but costs
+   nothing)
+9. **E1** wall hit-test fix (small, high annoyance-to-fix ratio, same area as C2)
+10. **E5** whole-room dragging (natural extension of C2's drag infrastructure)
+11. **E2** configurable wall thickness (needs A1 for the parsed input field)
+12. **E4** wall label offset/sizing (revisit of D1's styling)
+13. **E3b** outer-shell vertex insertion (extends C2's vertex-drag target set)
+14. **E3** interior dividing walls (bigger data-model lift; do after E3b/E2/E4
+    since it reuses their thickness/label/drag conventions)
