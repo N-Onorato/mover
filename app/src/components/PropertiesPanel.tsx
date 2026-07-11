@@ -113,6 +113,13 @@ function RoomProperties({ room }: { room: Room }) {
     return true
   }
 
+  function commitWallThickness(raw: string) {
+    const result = parseLength(raw, units)
+    if (!result.ok) return false
+    updateRoom(room.id, { wallThickness: result.value })
+    return true
+  }
+
   return (
     <div className={styles.section}>
       <div className={styles.sectionTitle}>Room</div>
@@ -121,6 +128,13 @@ function RoomProperties({ room }: { room: Room }) {
       <div className={styles.hint}>{formatLength(bb.width, units)}</div>
       <UndoableField label="Height" type="number" value={bb.height.toFixed(1)} onCommit={(raw) => commitDimension('y', raw)} />
       <div className={styles.hint}>{formatLength(bb.height, units)}</div>
+      <UndoableField
+        label="Wall Thickness"
+        type="number"
+        value={room.wallThickness.toFixed(2)}
+        onCommit={commitWallThickness}
+      />
+      <div className={styles.hint}>{formatLength(room.wallThickness, units)} (overrides project default)</div>
     </div>
   )
 }

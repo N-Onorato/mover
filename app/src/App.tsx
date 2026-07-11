@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Group, Panel, Separator, useDefaultLayout } from 'react-resizable-panels'
 import { MenuBar } from './components/MenuBar'
 import { Toolbar } from './components/Toolbar'
@@ -6,6 +6,7 @@ import { CatalogPanel } from './components/CatalogPanel'
 import { LayerPanel } from './components/LayerPanel'
 import { PropertiesPanel } from './components/PropertiesPanel'
 import { StatusBar } from './components/StatusBar'
+import { SettingsPanel } from './components/SettingsPanel'
 import { LayoutCanvas } from './canvas/LayoutCanvas'
 import { useProjectStore } from './store/projectStore'
 import { loadFromLocalStorage } from './io/load'
@@ -16,6 +17,8 @@ import resizeStyles from './components/ResizeHandle.module.css'
 const AUTOSAVE_DEBOUNCE_MS = 1000
 
 export default function App() {
+  const [settingsOpen, setSettingsOpen] = useState(false)
+
   useEffect(() => {
     const restored = loadFromLocalStorage()
     if (restored) useProjectStore.getState().setProject(restored)
@@ -34,7 +37,7 @@ export default function App() {
 
   return (
     <div className={styles.app}>
-      <MenuBar />
+      <MenuBar onOpenSettings={() => setSettingsOpen(true)} />
       <Toolbar />
       <div className={styles.workspace}>
         <Group orientation="horizontal" {...workspaceLayout}>
@@ -60,6 +63,7 @@ export default function App() {
         </Group>
       </div>
       <StatusBar />
+      {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
     </div>
   )
 }

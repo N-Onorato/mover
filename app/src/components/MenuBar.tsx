@@ -98,6 +98,7 @@ interface MenuState {
   hasSelection: boolean
   canUndo: boolean
   canRedo: boolean
+  onOpenSettings?: () => void
 }
 
 function buildMenus({
@@ -109,6 +110,7 @@ function buildMenus({
   hasSelection,
   canUndo,
   canRedo,
+  onOpenSettings,
 }: MenuState): MenuSpec[] {
   return [
     {
@@ -123,6 +125,8 @@ function buildMenus({
         'separator',
         { label: 'Export as PNG', onSelect: handleExportPng },
         { label: 'Export as SVG', disabled: true },
+        'separator',
+        { label: 'Project Settings...', onSelect: onOpenSettings },
       ],
     },
     {
@@ -188,7 +192,11 @@ function buildMenus({
   ]
 }
 
-export function MenuBar() {
+interface MenuBarProps {
+  onOpenSettings?: () => void
+}
+
+export function MenuBar({ onOpenSettings }: MenuBarProps = {}) {
   const [openMenu, setOpenMenu] = useState<string | null>(null)
   const rootRef = useRef<HTMLDivElement>(null)
 
@@ -202,8 +210,19 @@ export function MenuBar() {
   const canRedo = useHistoryStore((s) => s.future.length > 0)
 
   const menus = useMemo(
-    () => buildMenus({ showGrid, snapToGrid, units, rulerMode, view, hasSelection, canUndo, canRedo }),
-    [showGrid, snapToGrid, units, rulerMode, view, hasSelection, canUndo, canRedo],
+    () =>
+      buildMenus({
+        showGrid,
+        snapToGrid,
+        units,
+        rulerMode,
+        view,
+        hasSelection,
+        canUndo,
+        canRedo,
+        onOpenSettings,
+      }),
+    [showGrid, snapToGrid, units, rulerMode, view, hasSelection, canUndo, canRedo, onOpenSettings],
   )
 
   useEffect(() => {

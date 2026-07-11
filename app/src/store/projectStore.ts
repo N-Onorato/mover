@@ -1,12 +1,23 @@
 import { create } from 'zustand'
 import type {
   Project,
+  ProjectSettings,
   Room,
   FurnitureInstance,
   FurnitureDefinition,
   ReferenceImage,
   Annotation,
 } from '../types/project'
+
+// Length-valued settings (defaultWallThickness, room dimensions, etc.) are
+// always stored in the project's native world unit: inches when
+// settings.units === 'imperial', centimeters when settings.units === 'metric'
+// (same convention used throughout units.ts / parseLength / formatLength).
+// New projects are currently always created as imperial, so the default
+// below is 4.5" (standard US 2x4 stud wall + drywall on both faces). If a
+// metric default project is ever introduced, the equivalent value is
+// 11.43cm (4.5in * 2.54).
+const DEFAULT_WALL_THICKNESS_IMPERIAL_IN = 4.5
 
 function newProject(): Project {
   return {
@@ -20,7 +31,7 @@ function newProject(): Project {
       gridSize: 12,
       snapToGrid: true,
       snapToWalls: true,
-      defaultWallThickness: 6,
+      defaultWallThickness: DEFAULT_WALL_THICKNESS_IMPERIAL_IN,
       backgroundColor: '#f5f5f0',
       rulerMode: 'feet-inches',
     },
@@ -42,6 +53,7 @@ interface ProjectStore {
   touchModified: () => void
   toggleSnapToGrid: () => void
   toggleRulerMode: () => void
+  updateSettings: (patch: Partial<ProjectSettings>) => void
   removeEntities: (ids: string[]) => void
 
   addRoom: (room: Room) => void
@@ -96,6 +108,14 @@ export const useProjectStore = create<ProjectStore>((set) => ({
           ...s.project.settings,
           rulerMode: s.project.settings.rulerMode === 'feet-inches' ? 'simple' : 'feet-inches',
         },
+      },
+      isDirty: true,
+    })),
+  updateSettings: (patch) =>
+    set((s) => ({
+      project: {
+        ...s.project,
+        settings: { ...s.project.settings, ...patch },
       },
       isDirty: true,
     })),
