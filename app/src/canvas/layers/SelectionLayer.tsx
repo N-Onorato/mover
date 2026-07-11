@@ -126,7 +126,6 @@ export function SelectionLayer({ pixelsPerUnit, units }: Props) {
           units={units}
           wallThicknessWorld={defaultWallThickness}
           interiorRef={interiorRef}
-          fill="#4a9eff"
         />,
       )
     }
@@ -140,7 +139,6 @@ export function SelectionLayer({ pixelsPerUnit, units }: Props) {
           units={units}
           wallThicknessWorld={defaultWallThickness}
           interiorRef={interiorRef}
-          fill="#4a9eff"
         />,
       )
     }

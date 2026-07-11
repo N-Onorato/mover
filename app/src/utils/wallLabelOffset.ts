@@ -4,6 +4,16 @@ import type { Point } from '../types/project'
 // label clears the stroke even for thin walls.
 const LABEL_MARGIN_PX = 10
 
+// G1: WallLengthLabel renders at fontSize={15} with bold text, which Konva
+// renders as a glyph box roughly 18-20px tall. The label's Text node is
+// top-anchored (offsetY only repositions the anchor point, not the box's far
+// edge), so without accounting for the box's own height, the offset was only
+// guaranteed to clear the wall stroke at the anchor - the text could still
+// extend back across the wall centerline. Adding the full rendered label
+// height to the offset magnitude ensures the whole glyph box, not just its
+// anchor point, clears the wall by at least LABEL_MARGIN_PX.
+const LABEL_HEIGHT_PX = 20
+
 /**
  * Wall-length labels (RoomLayer.tsx and SelectionLayer.tsx's WallLengthLabel)
  * are Konva <Text> nodes positioned at the wall's start point `a`, rotated to
@@ -31,7 +41,7 @@ export function wallLabelOffsetY(
   pixelsPerUnit: number,
   interiorRef?: Point,
 ): number {
-  const magnitude = (wallThicknessWorld * pixelsPerUnit) / 2 + LABEL_MARGIN_PX
+  const magnitude = (wallThicknessWorld * pixelsPerUnit) / 2 + LABEL_MARGIN_PX + LABEL_HEIGHT_PX
 
   if (!interiorRef) {
     return magnitude

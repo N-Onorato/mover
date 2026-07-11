@@ -11,6 +11,14 @@ import { wallLabelOffsetY } from '../utils/wallLabelOffset'
 // wall - outward from `interiorRef` (e.g. the room's centroid) when one is
 // available, scaled by the wall thickness plus a fixed margin so the label
 // clears the rendered stroke instead of sitting on top of it.
+//
+// G1: color is fixed here (rather than supplied by callers) so every caller
+// renders the same large, bold, high-contrast label. Near-black was chosen
+// because the project's canvas background defaults to near-white (#f5f5f0,
+// projectStore.ts) - see wallLabelOffset.ts for how the label's own rendered
+// height is kept clear of the wall stroke.
+const LABEL_FILL = '#111111'
+
 export function WallLengthLabel({
   a,
   b,
@@ -18,7 +26,6 @@ export function WallLengthLabel({
   units,
   wallThicknessWorld,
   interiorRef,
-  fill,
 }: {
   a: Point
   b: Point
@@ -26,7 +33,6 @@ export function WallLengthLabel({
   units: UnitSystem
   wallThicknessWorld: number
   interiorRef?: Point
-  fill: string
 }) {
   const lenWorld = distance(a, b)
   if (lenWorld <= 0) return null
@@ -41,7 +47,8 @@ export function WallLengthLabel({
       align="center"
       text={formatLength(lenWorld, units)}
       fontSize={15}
-      fill={fill}
+      fontStyle="bold"
+      fill={LABEL_FILL}
       offsetY={offsetY}
       listening={false}
     />

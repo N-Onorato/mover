@@ -66,7 +66,6 @@ export function RoomLayer({ pixelsPerUnit }: Props) {
                     units={units}
                     wallThicknessWorld={room.wallThickness}
                     interiorRef={centroid}
-                    fill="#8fa"
                   />
                 )
               })}

@@ -1,4 +1,6 @@
 import { useUIStore, type Tool } from '../store/uiStore'
+import { useProjectStore } from '../store/projectStore'
+import { useHistoryStore } from '../store/historyStore'
 import { startImageImport } from '../canvas/tools/ImageTool'
 import styles from './Toolbar.module.css'
 
@@ -14,6 +16,12 @@ export function Toolbar() {
   const setActiveTool = useUIStore((s) => s.setActiveTool)
   const view = useUIStore((s) => s.view)
   const setView = useUIStore((s) => s.setView)
+  const snapToGrid = useProjectStore((s) => s.project.settings.snapToGrid)
+
+  const handleToggleSnapToGrid = () => {
+    useHistoryStore.getState().pushSnapshot(useProjectStore.getState().project)
+    useProjectStore.getState().toggleSnapToGrid()
+  }
 
   return (
     <div className={styles.toolbar}>
@@ -29,6 +37,13 @@ export function Toolbar() {
         ))}
       </div>
       <div className={styles.zoom}>
+        <button
+          className={`${styles.toolBtn} ${snapToGrid ? styles.active : ''}`}
+          onClick={handleToggleSnapToGrid}
+          title="Snap to Grid"
+        >
+          Snap
+        </button>
         <button onClick={() => setView({ ...view, scale: Math.min(10, view.scale * 1.2) })}>+</button>
         <span>{Math.round(view.scale * 100)}%</span>
         <button onClick={() => setView({ ...view, scale: Math.max(0.1, view.scale / 1.2) })}>-</button>

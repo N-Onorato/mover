@@ -32,12 +32,12 @@ export function startImageImport() {
       useHistoryStore.getState().pushSnapshot(useProjectStore.getState().project)
       useProjectStore.getState().addReferenceImage(image)
       useUIStore.getState().setActiveTool('image')
-      useUIStore.getState().setDrawingState({
-        kind: 'calibration',
-        imageId: image.id,
-        points: [],
-        cursor: null,
-      })
+      // G4: origin placement runs before calibration — the user first says
+      // where the image's outer top-left corner lands in world space, then
+      // (once that's confirmed) calibration sets the scale. Composing them
+      // this way means calibration's own point-picking always operates on an
+      // image that's already positioned where the user expects it.
+      startImageOrigin(image.id)
     })
     .catch((e) => {
       if (e instanceof ImageLoadError) window.alert(e.message)
@@ -47,6 +47,37 @@ export function startImageImport() {
 function cancelCalibration() {
   useUIStore.getState().setDrawingState(null)
   useUIStore.getState().setActiveTool('select')
+}
+
+function startImageOrigin(imageId: string) {
+  useUIStore.getState().setDrawingState({
+    kind: 'imageOrigin',
+    imageId,
+    cursor: null,
+  })
+}
+
+// G4: cancelling origin placement leaves the image at its default x:0, y:0
+// (set in startImageImport) — mirrors cancelCalibration's cancel behavior.
+function cancelImageOrigin() {
+  useUIStore.getState().setDrawingState(null)
+  useUIStore.getState().setActiveTool('select')
+}
+
+function finishImageOrigin(imageId: string, worldPt: Point) {
+  const { project, updateReferenceImage } = useProjectStore.getState()
+  const image = project.referenceImages.find((r) => r.id === imageId)
+  if (image) {
+    useHistoryStore.getState().pushSnapshot(project)
+    updateReferenceImage(imageId, { x: worldPt.x, y: worldPt.y })
+  }
+  // Origin placement is done; hand off to calibration for the same image.
+  useUIStore.getState().setDrawingState({
+    kind: 'calibration',
+    imageId,
+    points: [],
+    cursor: null,
+  })
 }
 
 function finishCalibration(imageId: string, points: [Point, Point]) {
@@ -87,7 +118,12 @@ function finishCalibration(imageId: string, points: [Point, Point]) {
 export const ImageTool: ToolHandlers = {
   onPointerDown(worldPt: Point, _ppu: number, _modifiers) {
     const { drawingState, setDrawingState } = useUIStore.getState()
-    if (!drawingState || drawingState.kind !== 'calibration') return
+    if (!drawingState) return
+    if (drawingState.kind === 'imageOrigin') {
+      finishImageOrigin(drawingState.imageId, worldPt)
+      return
+    }
+    if (drawingState.kind !== 'calibration') return
     const pts = [...drawingState.points, worldPt]
     if (pts.length >= 2) {
       finishCalibration(drawingState.imageId, [pts[0], pts[1]])
@@ -97,19 +133,29 @@ export const ImageTool: ToolHandlers = {
   },
   onPointerMove(worldPt: Point, _ppu: number, _modifiers) {
     const { drawingState, setDrawingState } = useUIStore.getState()
-    if (!drawingState || drawingState.kind !== 'calibration') return
-    setDrawingState({ ...drawingState, cursor: worldPt })
+    if (!drawingState) return
+    if (drawingState.kind === 'imageOrigin' || drawingState.kind === 'calibration') {
+      setDrawingState({ ...drawingState, cursor: worldPt })
+    }
   },
   onPointerUp(_worldPt, _ppu, _modifiers) {},
   onKeyDown(e: KeyboardEvent) {
-    if (e.key === 'Escape') cancelCalibration()
+    if (e.key !== 'Escape') return
+    const kind = useUIStore.getState().drawingState?.kind
+    if (kind === 'imageOrigin') cancelImageOrigin()
+    else if (kind === 'calibration') cancelCalibration()
   },
   onRightClick() {
-    cancelCalibration()
+    const kind = useUIStore.getState().drawingState?.kind
+    if (kind === 'imageOrigin') cancelImageOrigin()
+    else if (kind === 'calibration') cancelCalibration()
   },
-  // B1/F4: calibration needs raw (unsnapped) coordinates so its endpoints can
-  // land on the reference photo's real features rather than grid intersections.
+  // B1/F4: calibration and origin placement both need raw (unsnapped)
+  // coordinates — calibration's endpoints must land on the reference photo's
+  // real features rather than grid intersections, and origin placement
+  // should be equally precise rather than snapping the image to the grid.
   wantsRawPointer() {
-    return useUIStore.getState().drawingState?.kind === 'calibration'
+    const kind = useUIStore.getState().drawingState?.kind
+    return kind === 'calibration' || kind === 'imageOrigin'
   },
 }

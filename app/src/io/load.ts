@@ -2,6 +2,27 @@ import type { Project } from '../types/project'
 
 export class LoadError extends Error {}
 
+type SettingsMigration = (settings: Record<string, unknown>) => void
+
+// Each entry backfills one ProjectSettings field that may be missing from
+// older saved projects. Add a new entry here when a new settings field with
+// a default is introduced — no other changes to parseProject should be
+// needed.
+const SETTINGS_MIGRATIONS: SettingsMigration[] = [
+  (settings) => {
+    if (settings.rulerMode === undefined) settings.rulerMode = 'feet-inches'
+  },
+  (settings) => {
+    // Matches DEFAULT_WALL_THICKNESS_IMPERIAL_IN in store/projectStore.ts
+    // (the US standard 2x4 wall thickness), introduced in E2.
+    if (settings.defaultWallThickness === undefined) settings.defaultWallThickness = 4.5
+  },
+]
+
+function migrateSettings(settings: Record<string, unknown>): void {
+  for (const migrate of SETTINGS_MIGRATIONS) migrate(settings)
+}
+
 export function parseProject(json: string): Project {
   let data: unknown
   try {
@@ -16,11 +37,9 @@ export function parseProject(json: string): Project {
   if (p.version !== '1.0') {
     throw new LoadError(`Unsupported project version: ${p.version}`)
   }
-  // TODO: schema validation and migrations
+  // TODO: schema validation
   const settings = p.settings as Record<string, unknown> | undefined
-  if (settings && settings.rulerMode === undefined) {
-    settings.rulerMode = 'feet-inches'
-  }
+  if (settings) migrateSettings(settings)
   return data as Project
 }
 

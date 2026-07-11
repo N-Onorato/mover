@@ -22,7 +22,13 @@ export interface CalibrationDrawingState {
   cursor: Point | null  // current cursor in world space
 }
 
-export type DrawingState = RoomDrawingState | CalibrationDrawingState
+export interface ImageOriginDrawingState {
+  kind: 'imageOrigin'
+  imageId: string
+  cursor: Point | null  // current cursor in world space
+}
+
+export type DrawingState = RoomDrawingState | CalibrationDrawingState | ImageOriginDrawingState
 
 export interface SelectedWall {
   roomId: string
@@ -130,6 +136,9 @@ export function getToolHint(activeTool: Tool, drawingState: DrawingState | null)
     return drawingState.points.length === 0
       ? 'Calibration: click first point'
       : 'Calibration: click second point'
+  }
+  if (drawingState?.kind === 'imageOrigin') {
+    return 'Image: click to place the top-left corner'
   }
   switch (activeTool) {
     case 'select':

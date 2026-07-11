@@ -91,7 +91,12 @@ export function LayoutCanvas() {
     }
   }, [activeTool])
 
-  function getWorldPoint(_e: KonvaEventObject<MouseEvent>): Point {
+  // Holding Ctrl inverts the effective snap-to-grid setting for this pointer
+  // event (snap on -> off, off -> on). Ctrl is used (not Shift) because Shift
+  // is already used by SelectTool for marquee shift-add. Since the modifier
+  // arrives on the same native MouseEvent that triggers this snap decision,
+  // it's read directly here rather than tracked via a separate listener.
+  function getWorldPoint(e: KonvaEventObject<MouseEvent>): Point {
     const stage = stageRef.current!
     const pos = stage.getPointerPosition()!
     // stage.getPointerPosition() is relative to the container; subtract pan offset
@@ -99,7 +104,8 @@ export function LayoutCanvas() {
     const stageLocalY = pos.y - view.y
     const worldRaw: Point = { x: stageLocalX / pixelsPerUnit, y: stageLocalY / pixelsPerUnit }
     const wantsRaw = TOOLS[activeTool]?.wantsRawPointer?.() ?? false
-    if (settings.snapToGrid && !wantsRaw) {
+    const effectiveSnap = e.evt.ctrlKey ? !settings.snapToGrid : settings.snapToGrid
+    if (effectiveSnap && !wantsRaw) {
       const gridSpacing = adaptiveGridSize(settings.gridSize, view.scale)
       return snapToGrid(worldRaw, gridSpacing)
     }

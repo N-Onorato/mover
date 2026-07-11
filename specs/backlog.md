@@ -333,6 +333,7 @@ decision or touches every tool, not just the reviewed diff.
 
 ### F1. Per-room re-render/recompute cost during room drag
 **Priority: P3**
+**Status: Deferred (2026-07-11) — intentionally held back from the G1-G6/F5 parallel push: F2's suggested fix (storing dx/dy instead of materialized points in `dragState`) would restructure `RoomDragState`, the same shape F3 just finished stabilizing by moving drag/interaction state into `uiStore`. Safer as its own follow-up pass once that settles, rather than compounding two store-shape changes at once.**
 
 `RoomLayer.tsx` subscribes the whole layer to `dragState`
 (`const dragState = useUIStore((s) => s.dragState)`), which is a new object
@@ -357,6 +358,7 @@ Acceptance criteria:
 
 ### F2. Room-drag pointer-move materializes full point arrays every frame
 **Priority: P3**
+**Status: Deferred (2026-07-11) — see F1; same reasoning, same follow-up.**
 
 Related to F1. `SelectTool.ts`'s room-drag `onPointerMove` branch
 (`nextById[id] = orig.map((p) => ({ x: p.x + dx, y: p.y + dy }))`) rebuilds a
@@ -373,6 +375,7 @@ Acceptance criteria:
 
 ### F3. `ToolHandlers` doesn't carry pointer modifiers or the real pointer-up position
 **Priority: P2**
+**Status: Done (2026-07-11)**
 
 `SelectTool.ts:20-41` tracks `shiftHeld` via its own `window.addEventListener`
 at module scope, and separately tracks `lastWorldPt`/`dragAnchorWorld` as
@@ -400,6 +403,7 @@ Acceptance criteria:
 
 ### F4. Shared pointer-to-world conversion special-cases one tool's state
 **Priority: P3**
+**Status: Done (2026-07-11)**
 
 `LayoutCanvas.tsx:101-103` computes `isCalibratingImage` by reaching into
 `ImageTool`'s private `drawingState.kind === 'calibration'` value to decide
@@ -419,6 +423,7 @@ Acceptance criteria:
 
 ### F5. `load.ts` settings migration is hand-rolled per field
 **Priority: P3**
+**Status: Done (2026-07-11)**
 
 `io/load.ts` patches missing `ProjectSettings` fields (currently just
 `rulerMode`) with ad hoc `if (settings.field === undefined) settings.field =
@@ -445,6 +450,7 @@ Group E landed. Grounded against the current `app/src` implementation (verified
 
 ### G1. Wall length label color/weight and full clearance outside the wall
 **Priority: P2**
+**Status: Done (2026-07-11)**
 
 Depends on / revisits E4. `WallLengthLabel.tsx` renders at `fontSize={15}`
 (already bumped by E4) but the caller supplies the color: `RoomLayer.tsx:69`
@@ -472,6 +478,7 @@ Acceptance criteria:
 
 ### G2. Toolbar button to toggle snap-to-grid
 **Priority: P2**
+**Status: Done (2026-07-11)**
 
 `Toolbar.tsx` (the tool buttons + zoom row) has no snap control today — the
 only toggle is `MenuBar.tsx`'s View ▸ "Snap to Grid" entry
@@ -491,6 +498,7 @@ Acceptance criteria:
 
 ### G3. Modifier key to temporarily invert snap-to-grid
 **Priority: P2**
+**Status: Done (2026-07-11)**
 
 Depends on F3 (tool modifier plumbing). Snap is decided in one place —
 `LayoutCanvas.tsx`'s `getWorldPoint` (`LayoutCanvas.tsx:94-108`) — purely from
@@ -517,6 +525,7 @@ Acceptance criteria:
 
 ### G4. Prompt for image origin during reference image import
 **Priority: P2**
+**Status: Done (2026-07-11)**
 
 `startImageImport` (`ImageTool.ts:12-45`) always places the new image at
 `x: 0, y: 0` and immediately enters calibration mode
@@ -537,6 +546,7 @@ Acceptance criteria:
 
 ### G5. Selection hit-test state desyncs during operations
 **Priority: P1**
+**Status: Done (2026-07-11) — root cause confirmed as F3's module-level `let`s; fixed by F3 moving `mode`/`dragAnchorWorld` into uiStore. Manually reproduced wall drag → vertex drag → marquee select back-to-back at a fixed zoom and confirmed hit-testing stayed accurate throughout.**
 
 Note: "selection hitboxes become unsynced during operations and only seem to
 be fixed by changing zoom levels." Prime suspect is the exact pattern F3
@@ -559,6 +569,7 @@ Acceptance criteria:
 
 ### G6. Vertex indicators on rooms
 **Priority: P1**
+**Status: Done (2026-07-11)**
 
 Note: "difficult to click and drag vertices I can't find." Confirmed: once a
 room is committed, nothing renders its vertices. `HighlightLayer.tsx` (the
