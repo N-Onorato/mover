@@ -4,7 +4,6 @@ import { useProjectStore } from '../../store/projectStore'
 import {
   VERTEX_HIT_THRESHOLD_PX,
   FURNITURE_HANDLE_HIT_THRESHOLD_PX,
-  furnitureCenter,
   furnitureCorners,
   furnitureRotateHandle,
 } from '../tools/SelectTool'
