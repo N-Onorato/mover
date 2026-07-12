@@ -4,4 +4,11 @@
   overflow: hidden;
   position: relative;
   cursor: default;
+  /* All touch gestures are handled by the app (tools, pinch-zoom, two-finger
+   * pan) - stop the browser from scrolling/zooming the page instead. */
+  touch-action: none;
+  overscroll-behavior: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }

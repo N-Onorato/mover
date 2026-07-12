@@ -110,4 +110,13 @@ export const InteriorWallTool: ToolHandlers = {
   onRightClick() {
     useUIStore.getState().setDrawingState(null)
   },
+
+  // A pinch started right as the wall's first point was placed: drop the
+  // in-progress wall. (If the stray pointer-down was the *second* click it
+  // already committed the wall - drawingState is null by then and this is a
+  // no-op; the committed wall stays undoable.)
+  onGestureCancel() {
+    const { drawingState, setDrawingState } = useUIStore.getState()
+    if (drawingState?.kind === 'interiorWall') setDrawingState(null)
+  },
 }

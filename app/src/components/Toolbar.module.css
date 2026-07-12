@@ -59,3 +59,32 @@
 .zoom button:hover {
   background: #444;
 }
+
+/* Narrow screens: tighten spacing and let the toolbar scroll horizontally
+ * instead of clipping. */
+@media (max-width: 768px) {
+  .toolbar {
+    gap: 8px;
+    overflow-x: auto;
+  }
+
+  .tools {
+    flex-shrink: 0;
+  }
+
+  .zoom {
+    flex-shrink: 0;
+  }
+}
+
+/* Touch devices: bigger tap targets without disturbing desktop density. */
+@media (pointer: coarse) {
+  .toolBtn {
+    padding: 8px 10px;
+  }
+
+  .zoom button {
+    width: 32px;
+    height: 32px;
+  }
+}

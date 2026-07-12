@@ -51,6 +51,18 @@
   cursor: grabbing;
 }
 
+.item.armed {
+  background: #2d5be3;
+}
+
+.item.armed .itemName {
+  color: #fff;
+}
+
+.item.armed .itemSize {
+  color: #cdd9f5;
+}
+
 .itemName {
   font-size: 13px;
   color: #ddd;

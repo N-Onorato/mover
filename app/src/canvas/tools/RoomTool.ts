@@ -5,8 +5,7 @@ import { useProjectStore } from '../../store/projectStore'
 import { useHistoryStore } from '../../store/historyStore'
 import { distance } from '../../utils/geometry'
 import { isDoubleClick } from '../../utils/doubleClick'
-
-const CLOSE_THRESHOLD_PX = 14
+import { ROOM_CLOSE_THRESHOLD_PX } from '../../utils/pointer'
 
 let lastClickMs = 0
 
@@ -49,7 +48,7 @@ export const RoomTool: ToolHandlers = {
     lastClickMs = now
 
     // Click near first point: close polygon
-    const thresholdWorld = CLOSE_THRESHOLD_PX / ppu
+    const thresholdWorld = ROOM_CLOSE_THRESHOLD_PX / ppu
     if (pts.length >= 3 && distance(worldPt, pts[0]) <= thresholdWorld) {
       commitRoom(pts)
       return
@@ -92,6 +91,19 @@ export const RoomTool: ToolHandlers = {
       commitRoom(drawingState.points)
     } else {
       setDrawingState(null)
+    }
+  },
+
+  // A pinch started while drawing: the first finger's pointer-down added a
+  // stray point - pop it (or drop the drawing entirely if that stray point
+  // was the first one).
+  onGestureCancel() {
+    const { drawingState, setDrawingState } = useUIStore.getState()
+    if (!drawingState || drawingState.kind !== 'room') return
+    if (drawingState.points.length <= 1) {
+      setDrawingState(null)
+    } else {
+      setDrawingState({ ...drawingState, points: drawingState.points.slice(0, -1) })
     }
   },
 }

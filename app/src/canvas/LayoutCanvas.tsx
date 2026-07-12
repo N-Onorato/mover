@@ -15,12 +15,9 @@ import { FurnitureLayer } from './layers/FurnitureLayer'
 import { AnnotationLayer } from './layers/AnnotationLayer'
 import { SelectionLayer } from './layers/SelectionLayer'
 import { Rulers } from './Rulers'
-import { SelectTool } from './tools/SelectTool'
-import { RoomTool } from './tools/RoomTool'
-import { InteriorWallTool } from './tools/InteriorWallTool'
-import { ImageTool } from './tools/ImageTool'
-import { AnnotationTool } from './tools/AnnotationTool'
-import type { ToolHandlers, PointerModifiers } from './tools/SelectTool'
+import { DrawingControls } from './DrawingControls'
+import { TOOLS } from './tools'
+import type { PointerModifiers } from './tools/SelectTool'
 import type { Point } from '../types/project'
 import { snapToGrid } from '../utils/snap'
 import { adaptiveGridSize } from '../utils/snap'
@@ -28,14 +25,6 @@ import { setStage } from './stageRegistry'
 import styles from './LayoutCanvas.module.css'
 
 const BASE_PIXELS_PER_UNIT = 10
-
-const TOOLS: Record<string, ToolHandlers> = {
-  select: SelectTool,
-  room: RoomTool,
-  interiorWall: InteriorWallTool,
-  image: ImageTool,
-  annotation: AnnotationTool,
-}
 
 export function LayoutCanvas() {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -55,6 +44,15 @@ export function LayoutCanvas() {
   const isPanning = useRef(false)
   const panAnchor = useRef({ clientX: 0, clientY: 0, vx: 0, vy: 0 })
   const isSpaceHeld = useRef(false)
+
+  // Touch gesture state (refs - no re-renders). touchPoints holds
+  // container-relative positions of active touch pointers only; mouse/pen
+  // pointers never enter it. While a second finger is down, tools are
+  // suppressed until every finger lifts so a pinch never also draws/drags.
+  const touchPoints = useRef(new Map<number, Point>())
+  const pinchStart = useRef<{ dist: number; mid: Point; view: { x: number; y: number; scale: number } } | null>(null)
+  const suppressTools = useRef(false)
+  const touchDispatchedToTool = useRef(false)
 
   // Sync container size
   useEffect(() => {
@@ -83,6 +81,10 @@ export function LayoutCanvas() {
         e.preventDefault()
         return
       }
+      if (e.key === 'Escape' && useUIStore.getState().pendingPlacementDefId) {
+        useUIStore.getState().setPendingPlacement(null)
+        return
+      }
       TOOLS[activeTool]?.onKeyDown(e)
     }
     function onKeyUp(e: KeyboardEvent) {
@@ -107,10 +109,10 @@ export function LayoutCanvas() {
   // Holding Ctrl inverts the effective snap-to-grid setting for this pointer
   // event (snap on -> off, off -> on). Ctrl is used (not Shift) because Shift
   // is already used by SelectTool for marquee shift-add. Since the modifier
-  // arrives on the same native MouseEvent that triggers this snap decision,
+  // arrives on the same native PointerEvent that triggers this snap decision,
   // it's read directly here rather than tracked via a separate listener.
   const getWorldPoint = useCallback(
-    (e: KonvaEventObject<MouseEvent>): Point => {
+    (e: KonvaEventObject<PointerEvent>): Point => {
       const stage = stageRef.current!
       const pos = stage.getPointerPosition()!
       // stage.getPointerPosition() is relative to the container (no stage
@@ -130,8 +132,16 @@ export function LayoutCanvas() {
     [activeTool, settings],
   )
 
-  function getModifiers(e: KonvaEventObject<MouseEvent>): PointerModifiers {
+  function getModifiers(e: KonvaEventObject<PointerEvent>): PointerModifiers {
     return { shift: e.evt.shiftKey, ctrl: e.evt.ctrlKey }
+  }
+
+  // Container-relative position of a pointer event. Used for multi-touch
+  // gesture math instead of stage.getPointerPosition(), which only tracks a
+  // single position per event and can't distinguish two fingers.
+  function getContainerPoint(e: KonvaEventObject<PointerEvent>): Point {
+    const rect = containerRef.current!.getBoundingClientRect()
+    return { x: e.evt.clientX - rect.left, y: e.evt.clientY - rect.top }
   }
 
   // Live pixels-per-unit for tool dispatch, read from viewRef so hit-test
@@ -139,8 +149,44 @@ export function LayoutCanvas() {
   // handlers haven't been recreated.
   const livePpu = () => BASE_PIXELS_PER_UNIT * viewRef.current.scale
 
-  const handleMouseDown = useCallback(
-    (e: KonvaEventObject<MouseEvent>) => {
+  /** Shared placement path for catalog drag-drop and tap-to-place: snapshot
+   * for undo, create the instance at worldPt, select it. */
+  const placeFurnitureAt = useCallback((defId: string, worldPt: Point) => {
+    const def = findDefinition(defId)
+    if (!def) return
+    useHistoryStore.getState().pushSnapshot(useProjectStore.getState().project)
+    const instance = createFurnitureInstance(def, worldPt)
+    useProjectStore.getState().addFurniture(instance)
+    useUIStore.getState().setSelection([instance.id])
+  }, [])
+
+  const handlePointerDown = useCallback(
+    (e: KonvaEventObject<PointerEvent>) => {
+      if (e.evt.pointerType === 'touch') {
+        touchPoints.current.set(e.evt.pointerId, getContainerPoint(e))
+        if (touchPoints.current.size === 2) {
+          // Second finger down: this is a pan/pinch gesture, not a tool
+          // action. If the first finger already reached the active tool,
+          // let it undo whatever that stray pointer-down started.
+          if (touchDispatchedToTool.current) {
+            TOOLS[activeTool]?.onGestureCancel?.()
+            touchDispatchedToTool.current = false
+          }
+          suppressTools.current = true
+          isPanning.current = false
+          const [p1, p2] = [...touchPoints.current.values()]
+          pinchStart.current = {
+            dist: Math.hypot(p2.x - p1.x, p2.y - p1.y),
+            mid: { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 },
+            view: viewRef.current,
+          }
+          return
+        }
+        if (touchPoints.current.size > 2 || suppressTools.current) return
+      } else if (suppressTools.current) {
+        return
+      }
+
       const button = e.evt.button
       if (button === 1 || (button === 0 && isSpaceHeld.current)) {
         isPanning.current = true
@@ -158,15 +204,58 @@ export function LayoutCanvas() {
         return
       }
       if (button === 0) {
+        // Armed tap-to-place from the catalog takes priority over the active
+        // tool: place the pending furniture at the tap point and disarm.
+        const pendingDefId = useUIStore.getState().pendingPlacementDefId
+        if (pendingDefId) {
+          const stage = stageRef.current!
+          const pos = stage.getPointerPosition()!
+          const v = viewRef.current
+          const ppu = BASE_PIXELS_PER_UNIT * v.scale
+          const worldRaw: Point = { x: (pos.x - v.x) / ppu, y: (pos.y - v.y) / ppu }
+          const worldPt = settings.snapToGrid
+            ? snapToGrid(worldRaw, adaptiveGridSize(settings.gridSize, v.scale))
+            : worldRaw
+          placeFurnitureAt(pendingDefId, worldPt)
+          useUIStore.getState().setPendingPlacement(null)
+          return
+        }
         const worldPt = getWorldPoint(e)
         TOOLS[activeTool]?.onPointerDown(worldPt, livePpu(), getModifiers(e))
+        if (e.evt.pointerType === 'touch') touchDispatchedToTool.current = true
       }
     },
-    [activeTool, getWorldPoint],
+    [activeTool, getWorldPoint, placeFurnitureAt, settings],
   )
 
-  const handleMouseMove = useCallback(
-    (e: KonvaEventObject<MouseEvent>) => {
+  const handlePointerMove = useCallback(
+    (e: KonvaEventObject<PointerEvent>) => {
+      if (e.evt.pointerType === 'touch' && touchPoints.current.has(e.evt.pointerId)) {
+        touchPoints.current.set(e.evt.pointerId, getContainerPoint(e))
+        if (pinchStart.current && touchPoints.current.size >= 2) {
+          // Two-finger gesture: anchored pinch-zoom around the fingers'
+          // midpoint. All math is relative to the gesture's start state, so
+          // a near-constant distance ratio degenerates into a pure pan.
+          const [p1, p2] = [...touchPoints.current.values()]
+          const dist = Math.hypot(p2.x - p1.x, p2.y - p1.y)
+          const mid = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 }
+          const start = pinchStart.current
+          const ratio = start.dist > 0 ? dist / start.dist : 1
+          const newScale = Math.min(10, Math.max(0.05, start.view.scale * ratio))
+          const startPpu = BASE_PIXELS_PER_UNIT * start.view.scale
+          const newPpu = BASE_PIXELS_PER_UNIT * newScale
+          // keep the world point under the gesture's start midpoint glued to
+          // the current midpoint
+          const worldX = (start.mid.x - start.view.x) / startPpu
+          const worldY = (start.mid.y - start.view.y) / startPpu
+          setView({ x: mid.x - worldX * newPpu, y: mid.y - worldY * newPpu, scale: newScale })
+          return
+        }
+        if (suppressTools.current) return
+      } else if (e.evt.pointerType === 'touch' && suppressTools.current) {
+        return
+      }
+
       if (isPanning.current) {
         const dx = e.evt.clientX - panAnchor.current.clientX
         const dy = e.evt.clientY - panAnchor.current.clientY
@@ -179,8 +268,26 @@ export function LayoutCanvas() {
     [activeTool, getWorldPoint, setView],
   )
 
-  const handleMouseUp = useCallback(
-    (e: KonvaEventObject<MouseEvent>) => {
+  const handlePointerUp = useCallback(
+    (e: KonvaEventObject<PointerEvent>) => {
+      if (e.evt.pointerType === 'touch') {
+        touchPoints.current.delete(e.evt.pointerId)
+        // Any finger lifting ends the pinch; suppression persists until the
+        // last finger is up so the remaining finger can't start drawing.
+        if (pinchStart.current) pinchStart.current = null
+        if (touchPoints.current.size === 0) {
+          const wasSuppressed = suppressTools.current
+          suppressTools.current = false
+          if (wasSuppressed) {
+            touchDispatchedToTool.current = false
+            return
+          }
+        } else if (suppressTools.current) {
+          return
+        }
+        touchDispatchedToTool.current = false
+      }
+
       if (isPanning.current) {
         isPanning.current = false
         return
@@ -193,6 +300,23 @@ export function LayoutCanvas() {
     [activeTool, getWorldPoint],
   )
 
+  const handlePointerCancel = useCallback(
+    (e: KonvaEventObject<PointerEvent>) => {
+      if (e.evt.pointerType !== 'touch') {
+        isPanning.current = false
+        return
+      }
+      touchPoints.current.delete(e.evt.pointerId)
+      pinchStart.current = null
+      if (touchDispatchedToTool.current) {
+        TOOLS[activeTool]?.onGestureCancel?.()
+        touchDispatchedToTool.current = false
+      }
+      if (touchPoints.current.size === 0) suppressTools.current = false
+    },
+    [activeTool],
+  )
+
   function handleDragOver(e: React.DragEvent<HTMLDivElement>) {
     e.preventDefault()
   }
@@ -201,8 +325,6 @@ export function LayoutCanvas() {
     e.preventDefault()
     const defId = e.dataTransfer.getData('application/mover-furniture')
     if (!defId) return
-    const def = findDefinition(defId)
-    if (!def) return
 
     const rect = containerRef.current?.getBoundingClientRect()
     if (!rect) return
@@ -216,10 +338,7 @@ export function LayoutCanvas() {
       ? snapToGrid(worldRaw, adaptiveGridSize(settings.gridSize, v.scale))
       : worldRaw
 
-    useHistoryStore.getState().pushSnapshot(useProjectStore.getState().project)
-    const instance = createFurnitureInstance(def, worldPt)
-    useProjectStore.getState().addFurniture(instance)
-    useUIStore.getState().setSelection([instance.id])
+    placeFurnitureAt(defId, worldPt)
   }
 
   function handleWheel(e: React.WheelEvent<HTMLDivElement>) {
@@ -256,9 +375,10 @@ export function LayoutCanvas() {
         height={size.height}
         x={view.x}
         y={view.y}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerCancel}
         onContextMenu={(e) => e.evt.preventDefault()}
       >
         {showGrid && (
@@ -293,6 +413,7 @@ export function LayoutCanvas() {
         units={settings.units}
         rulerMode={settings.rulerMode}
       />
+      <DrawingControls />
     </div>
   )
 }

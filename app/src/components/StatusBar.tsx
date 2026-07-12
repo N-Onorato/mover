@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { useProjectStore } from '../store/projectStore'
 import { useUIStore, TOOL_LABELS, getToolHint } from '../store/uiStore'
+import { findDefinition } from '../furniture/catalog'
 import { polygonArea } from '../utils/geometry'
 import { formatArea } from '../utils/units'
 import styles from './StatusBar.module.css'
@@ -8,10 +9,14 @@ import styles from './StatusBar.module.css'
 export function StatusBar() {
   const activeTool = useUIStore((s) => s.activeTool)
   const drawingState = useUIStore((s) => s.drawingState)
+  const pendingPlacementDefId = useUIStore((s) => s.pendingPlacementDefId)
   const rooms = useProjectStore((s) => s.project.rooms)
   const units = useProjectStore((s) => s.project.settings.units)
 
-  const hint = getToolHint(activeTool, drawingState)
+  const pendingName = pendingPlacementDefId
+    ? (findDefinition(pendingPlacementDefId)?.name ?? null)
+    : null
+  const hint = getToolHint(activeTool, drawingState, pendingName)
   const toolLabel = TOOL_LABELS[activeTool]
 
   const totalArea = useMemo(

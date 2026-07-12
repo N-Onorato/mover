@@ -150,6 +150,17 @@ export const ImageTool: ToolHandlers = {
     if (kind === 'imageOrigin') cancelImageOrigin()
     else if (kind === 'calibration') cancelCalibration()
   },
+  // A pinch started mid-calibration: the first finger added a stray
+  // calibration point - pop it so the user can zoom in for precision and
+  // re-pick. (imageOrigin commits on pointer-down and hands off to
+  // calibration with zero points, so there's nothing to pop there; the
+  // placed origin stays undoable.)
+  onGestureCancel() {
+    const { drawingState, setDrawingState } = useUIStore.getState()
+    if (drawingState?.kind === 'calibration' && drawingState.points.length > 0) {
+      setDrawingState({ ...drawingState, points: drawingState.points.slice(0, -1) })
+    }
+  },
   // B1/F4: calibration and origin placement both need raw (unsnapped)
   // coordinates — calibration's endpoints must land on the reference photo's
   // real features rather than grid intersections, and origin placement

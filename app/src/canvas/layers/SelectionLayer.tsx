@@ -6,13 +6,12 @@ import { formatLength } from '../../utils/units'
 import type { UnitSystem } from '../../utils/units'
 import type { Point } from '../../types/project'
 import { WallLengthLabel } from '../WallLengthLabel'
+import { ROOM_CLOSE_THRESHOLD_PX as CLOSE_THRESHOLD_PX } from '../../utils/pointer'
 
 interface Props {
   pixelsPerUnit: number
   units: UnitSystem
 }
-
-const CLOSE_THRESHOLD_PX = 14
 
 function CalibrationPreviewContents({ pixelsPerUnit, units }: Props) {
   const drawingState = useUIStore((s) => s.drawingState)

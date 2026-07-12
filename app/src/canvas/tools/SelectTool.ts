@@ -12,6 +12,7 @@ import {
   rotatePoint,
 } from '../../utils/geometry'
 import { isDoubleClick } from '../../utils/doubleClick'
+import { isCoarsePointer } from '../../utils/pointer'
 import { wallThresholdWorld } from '../../utils/wallThreshold'
 import { MIN_FURNITURE_SIZE } from '../../furniture/catalog'
 
@@ -31,14 +32,21 @@ export interface ToolHandlers {
   /** Whether this tool wants raw (unsnapped) pointer coordinates instead of
    * grid-snapped ones. Defaults to false (snapped) when omitted. */
   wantsRawPointer?(): boolean
+  /** Called when a pointer-down already dispatched to this tool turns out to
+   * be the start of a multi-touch gesture (pinch/pan) or is cancelled by the
+   * browser. The tool should discard whatever that stray pointer-down
+   * started, without committing anything. */
+  onGestureCancel?(): void
 }
 
-export const WALL_HIT_THRESHOLD_PX = 8
-export const VERTEX_HIT_THRESHOLD_PX = 9
+// Hit-test thresholds are wider on touch devices - a fingertip can't land
+// within a few pixels the way a mouse cursor can.
+export const WALL_HIT_THRESHOLD_PX = isCoarsePointer ? 14 : 8
+export const VERTEX_HIT_THRESHOLD_PX = isCoarsePointer ? 16 : 9
 const MARQUEE_MIN_DRAG_PX = 4
 
-export const FURNITURE_HANDLE_HIT_THRESHOLD_PX = 9
-export const FURNITURE_ROTATE_HANDLE_HIT_THRESHOLD_PX = 10
+export const FURNITURE_HANDLE_HIT_THRESHOLD_PX = isCoarsePointer ? 16 : 9
+export const FURNITURE_ROTATE_HANDLE_HIT_THRESHOLD_PX = isCoarsePointer ? 18 : 10
 export const FURNITURE_ROTATE_HANDLE_OFFSET_PX = 24
 
 /** Center of a furniture instance's unrotated box - the pivot both rendering
@@ -701,6 +709,19 @@ export const SelectTool: ToolHandlers = {
 
   onKeyDown(_e) {},
   onRightClick() {},
+
+  // A pinch started mid-drag: drop the in-progress drag/marquee without
+  // committing. Safe because every drag variant previews via dragState and
+  // only writes to projectStore on pointer-up.
+  onGestureCancel() {
+    const { setDragState, setMarquee, setInteractionMode, setDragAnchorWorld } =
+      useUIStore.getState()
+    setDragState(null)
+    setMarquee(null)
+    setInteractionMode('idle')
+    setDragAnchorWorld(null)
+    lastClickEdge = null
+  },
 
   // Furniture handles (resize corners, rotate handle) sit at precise,
   // non-grid-aligned world positions - a fixed pixel offset for the rotate

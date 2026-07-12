@@ -166,6 +166,11 @@ interface UIStore {
   dragState: DragState | null
   interactionMode: InteractionMode
   dragAnchorWorld: Point | null
+  /** Catalog definition armed for tap-to-place: the next canvas click/tap
+   * places this furniture instead of dispatching to the active tool. The
+   * touch-friendly alternative to HTML5 drag-and-drop (which never fires on
+   * touchscreens). */
+  pendingPlacementDefId: string | null
   showWallLabels: boolean
   showLayers: {
     referenceImages: boolean
@@ -193,6 +198,7 @@ interface UIStore {
   setDragState: (dragState: DragState | null) => void
   setInteractionMode: (mode: InteractionMode) => void
   setDragAnchorWorld: (pt: Point | null) => void
+  setPendingPlacement: (defId: string | null) => void
   toggleWallLabels: () => void
   toggleLayerVisibility: (layer: keyof UIStore['showLayers']) => void
   toggleLayerLock: (layer: keyof UIStore['lockedLayers']) => void
@@ -213,7 +219,14 @@ export const TOOL_LABELS: Record<Tool, string> = {
  * in-progress drawingState into account. Purely a read-only helper over
  * existing state — safe to call from any component.
  */
-export function getToolHint(activeTool: Tool, drawingState: DrawingState | null): string {
+export function getToolHint(
+  activeTool: Tool,
+  drawingState: DrawingState | null,
+  pendingPlacementName?: string | null,
+): string {
+  if (pendingPlacementName) {
+    return `Place: click or tap the canvas to place ${pendingPlacementName} (Esc to cancel)`
+  }
   if (drawingState?.kind === 'room') {
     return drawingState.points.length < 3
       ? 'Room: click to add point'
@@ -257,6 +270,7 @@ export const useUIStore = create<UIStore>((set) => ({
   dragState: null,
   interactionMode: 'idle',
   dragAnchorWorld: null,
+  pendingPlacementDefId: null,
   showWallLabels: true,
   showLayers: {
     referenceImages: true,
@@ -283,6 +297,7 @@ export const useUIStore = create<UIStore>((set) => ({
       dragState: null,
       interactionMode: 'idle',
       dragAnchorWorld: null,
+      pendingPlacementDefId: null,
     }),
   setSelection: (ids) => set({ selectedIds: ids, selectedWall: null, selectedInteriorWall: null }),
   addToSelection: (id) => set((s) => ({ selectedIds: [...s.selectedIds, id] })),
@@ -295,6 +310,7 @@ export const useUIStore = create<UIStore>((set) => ({
   setDragState: (dragState) => set({ dragState }),
   setInteractionMode: (mode) => set({ interactionMode: mode }),
   setDragAnchorWorld: (pt) => set({ dragAnchorWorld: pt }),
+  setPendingPlacement: (defId) => set({ pendingPlacementDefId: defId }),
   toggleWallLabels: () => set((s) => ({ showWallLabels: !s.showWallLabels })),
   toggleLayerVisibility: (layer) =>
     set((s) => ({

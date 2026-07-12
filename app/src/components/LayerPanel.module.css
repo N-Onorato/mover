@@ -57,3 +57,12 @@
 .iconBtn.visible { color: #4af; }
 .iconBtn.hidden { color: #555; }
 .iconBtn.locked { color: #f84; }
+
+/* Touch devices: bigger tap targets without disturbing desktop density. */
+@media (pointer: coarse) {
+  .iconBtn {
+    width: 32px;
+    height: 32px;
+    font-size: 13px;
+  }
+}

@@ -12,7 +12,14 @@ const TOOLS: { id: Tool; label: string }[] = [
   { id: 'annotation', label: 'Annotate' },
 ]
 
-export function Toolbar() {
+interface Props {
+  /** Present only in the narrow-screen layout: toggles the catalog drawer. */
+  onToggleCatalog?: () => void
+  /** Present only in the narrow-screen layout: toggles the layers/properties drawer. */
+  onTogglePanels?: () => void
+}
+
+export function Toolbar({ onToggleCatalog, onTogglePanels }: Props = {}) {
   const activeTool = useUIStore((s) => s.activeTool)
   const setActiveTool = useUIStore((s) => s.setActiveTool)
   const view = useUIStore((s) => s.view)
@@ -26,6 +33,11 @@ export function Toolbar() {
 
   return (
     <div className={styles.toolbar}>
+      {onToggleCatalog && (
+        <button className={styles.toolBtn} onClick={onToggleCatalog}>
+          Catalog
+        </button>
+      )}
       <div className={styles.tools}>
         {TOOLS.map((t) => (
           <button
@@ -48,6 +60,11 @@ export function Toolbar() {
         <button onClick={() => setView({ ...view, scale: Math.min(10, view.scale * 1.2) })}>+</button>
         <span>{Math.round(view.scale * 100)}%</span>
         <button onClick={() => setView({ ...view, scale: Math.max(0.1, view.scale / 1.2) })}>-</button>
+        {onTogglePanels && (
+          <button className={styles.toolBtn} onClick={onTogglePanels}>
+            Panels
+          </button>
+        )}
       </div>
     </div>
   )
