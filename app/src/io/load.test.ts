@@ -52,4 +52,25 @@ describe('parseProject', () => {
     expect(project.settings.rulerMode).toBe('simple')
     expect(project.settings.defaultWallThickness).toBe(6)
   })
+
+  it('backfills interiorWalls when missing (pre-E3 saved projects)', () => {
+    const project = parseProject(JSON.stringify(baseProject()))
+    expect(project.interiorWalls).toEqual([])
+  })
+
+  it('round-trips existing interiorWalls untouched', () => {
+    const wall = {
+      id: 'w1',
+      roomId: 'r1',
+      a: { x: 0, y: 0 },
+      b: { x: 100, y: 0 },
+      thickness: 4.5,
+      locked: false,
+      visible: true,
+    }
+    const project = parseProject(
+      JSON.stringify({ ...baseProject(), interiorWalls: [wall] }),
+    )
+    expect(project.interiorWalls).toEqual([wall])
+  })
 })

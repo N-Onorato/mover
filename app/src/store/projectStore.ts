@@ -3,6 +3,7 @@ import type {
   Project,
   ProjectSettings,
   Room,
+  InteriorWall,
   FurnitureInstance,
   FurnitureDefinition,
   ReferenceImage,
@@ -36,6 +37,7 @@ function newProject(): Project {
       rulerMode: 'feet-inches',
     },
     rooms: [],
+    interiorWalls: [],
     furnitureInstances: [],
     customFurnitureDefs: [],
     referenceImages: [],
@@ -59,6 +61,10 @@ interface ProjectStore {
   addRoom: (room: Room) => void
   updateRoom: (id: string, patch: Partial<Room>) => void
   removeRoom: (id: string) => void
+
+  addInteriorWall: (wall: InteriorWall) => void
+  updateInteriorWall: (id: string, patch: Partial<InteriorWall>) => void
+  removeInteriorWall: (id: string) => void
 
   addFurniture: (instance: FurnitureInstance) => void
   updateFurniture: (id: string, patch: Partial<FurnitureInstance>) => void
@@ -122,10 +128,17 @@ export const useProjectStore = create<ProjectStore>((set) => ({
   removeEntities: (ids) =>
     set((s) => {
       const idSet = new Set(ids)
+      const remainingRooms = s.project.rooms.filter((r) => !idSet.has(r.id))
+      const removedRoomIds = new Set(
+        s.project.rooms.filter((r) => idSet.has(r.id)).map((r) => r.id),
+      )
       return {
         project: {
           ...s.project,
-          rooms: s.project.rooms.filter((r) => !idSet.has(r.id)),
+          rooms: remainingRooms,
+          interiorWalls: s.project.interiorWalls.filter(
+            (w) => !idSet.has(w.id) && !removedRoomIds.has(w.roomId),
+          ),
           furnitureInstances: s.project.furnitureInstances.filter((f) => !idSet.has(f.id)),
           annotations: s.project.annotations.filter((a) => !idSet.has(a.id)),
         },
@@ -148,7 +161,33 @@ export const useProjectStore = create<ProjectStore>((set) => ({
     })),
   removeRoom: (id) =>
     set((s) => ({
-      project: { ...s.project, rooms: s.project.rooms.filter((r) => r.id !== id) },
+      project: {
+        ...s.project,
+        rooms: s.project.rooms.filter((r) => r.id !== id),
+        interiorWalls: s.project.interiorWalls.filter((w) => w.roomId !== id),
+      },
+      isDirty: true,
+    })),
+
+  addInteriorWall: (wall) =>
+    set((s) => ({
+      project: { ...s.project, interiorWalls: [...s.project.interiorWalls, wall] },
+      isDirty: true,
+    })),
+  updateInteriorWall: (id, patch) =>
+    set((s) => ({
+      project: {
+        ...s.project,
+        interiorWalls: s.project.interiorWalls.map((w) => (w.id === id ? { ...w, ...patch } : w)),
+      },
+      isDirty: true,
+    })),
+  removeInteriorWall: (id) =>
+    set((s) => ({
+      project: {
+        ...s.project,
+        interiorWalls: s.project.interiorWalls.filter((w) => w.id !== id),
+      },
       isDirty: true,
     })),
 

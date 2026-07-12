@@ -1,4 +1,4 @@
-import type { FurnitureDefinition } from '../types/project'
+import type { FurnitureCategory, FurnitureDefinition, FurnitureInstance, Point } from '../types/project'
 
 const catalog: FurnitureDefinition[] = [
   // Seating
@@ -40,4 +40,37 @@ export default catalog
 
 export function findDefinition(id: string): FurnitureDefinition | undefined {
   return catalog.find((d) => d.id === id)
+}
+
+// Practical per-category defaults so placed items are visually
+// distinguishable before the user customizes them.
+export const CATEGORY_COLORS: Record<FurnitureCategory, string> = {
+  seating: '#c98a5e',
+  tables: '#b08968',
+  storage: '#8a7461',
+  beds: '#9fb4c9',
+  appliances: '#a8adb3',
+  bathroom: '#8fb3ae',
+  office: '#7e93b0',
+  lighting: '#d8c07a',
+  other: '#a8a29e',
+}
+
+// Floor for furniture width/depth during resize, in world units (inches-equivalent).
+export const MIN_FURNITURE_SIZE = 2
+
+export function createFurnitureInstance(def: FurnitureDefinition, center: Point): FurnitureInstance {
+  return {
+    id: crypto.randomUUID(),
+    definitionId: def.id,
+    x: center.x - def.width / 2,
+    y: center.y - def.depth / 2,
+    width: def.width,
+    depth: def.depth,
+    rotation: 0,
+    fillColor: CATEGORY_COLORS[def.category],
+    label: def.name,
+    locked: false,
+    visible: true,
+  }
 }

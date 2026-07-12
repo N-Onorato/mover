@@ -11,6 +11,7 @@ export interface Project {
   modified: string
   settings: ProjectSettings
   rooms: Room[]
+  interiorWalls: InteriorWall[]
   furnitureInstances: FurnitureInstance[]
   customFurnitureDefs: FurnitureDefinition[]
   referenceImages: ReferenceImage[]
@@ -34,6 +35,16 @@ export interface Room {
   wallThickness: number
   fillColor: string
   wallColor: string
+  locked: boolean
+  visible: boolean
+}
+
+export interface InteriorWall {
+  id: string
+  roomId: string
+  a: Point
+  b: Point
+  thickness: number
   locked: boolean
   visible: boolean
 }

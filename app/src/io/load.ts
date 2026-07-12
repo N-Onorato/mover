@@ -40,6 +40,12 @@ export function parseProject(json: string): Project {
   // TODO: schema validation
   const settings = p.settings as Record<string, unknown> | undefined
   if (settings) migrateSettings(settings)
+  // interiorWalls is a top-level Project array added after some saved
+  // projects existed; SETTINGS_MIGRATIONS only backfills project.settings
+  // fields, so this is handled separately.
+  if (!Array.isArray(p.interiorWalls)) p.interiorWalls = []
+  if (!Array.isArray(p.furnitureInstances)) p.furnitureInstances = []
+  if (!Array.isArray(p.customFurnitureDefs)) p.customFurnitureDefs = []
   return data as Project
 }
 

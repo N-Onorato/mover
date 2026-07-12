@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import type { Point } from '../types/project'
 
-export type Tool = 'select' | 'room' | 'image' | 'annotation'
+export type Tool = 'select' | 'room' | 'interiorWall' | 'image' | 'annotation'
 
 export interface ViewState {
   x: number
@@ -28,11 +28,26 @@ export interface ImageOriginDrawingState {
   cursor: Point | null  // current cursor in world space
 }
 
-export type DrawingState = RoomDrawingState | CalibrationDrawingState | ImageOriginDrawingState
+export interface InteriorWallDrawingState {
+  kind: 'interiorWall'
+  roomId: string
+  a: Point        // committed (snapped) start point in world space
+  cursor: Point | null  // current cursor in world space (snap-previewed)
+}
+
+export type DrawingState =
+  | RoomDrawingState
+  | CalibrationDrawingState
+  | ImageOriginDrawingState
+  | InteriorWallDrawingState
 
 export interface SelectedWall {
   roomId: string
   edgeIndex: number
+}
+
+export interface SelectedInteriorWall {
+  wallId: string
 }
 
 export interface MarqueeState {
@@ -64,17 +79,87 @@ export interface RoomDragState {
   currentPointsById: Record<string, Point[]> // live-updated preview during drag, keyed by room id
 }
 
-export type DragState = WallDragState | VertexDragState | RoomDragState
+export interface InteriorWallEndpointDragState {
+  kind: 'interiorWallEndpoint'
+  wallId: string
+  which: 'a' | 'b'
+  originalA: Point
+  originalB: Point
+  currentA: Point
+  currentB: Point
+}
+
+export interface InteriorWallBodyDragState {
+  kind: 'interiorWallBody'
+  wallId: string
+  originalA: Point
+  originalB: Point
+  currentA: Point
+  currentB: Point
+}
+
+export interface FurnitureMoveDragState {
+  kind: 'furnitureMove'
+  id: string
+  originalX: number
+  originalY: number
+  currentX: number
+  currentY: number
+}
+
+export interface FurnitureResizeDragState {
+  kind: 'furnitureResize'
+  id: string
+  corner: 0 | 1 | 2 | 3 // index into rectPoints(x,y,w,h) order: TL,TR,BR,BL
+  rotation: number // fixed for the duration of the resize
+  originalX: number
+  originalY: number
+  originalWidth: number
+  originalDepth: number
+  currentX: number
+  currentY: number
+  currentWidth: number
+  currentDepth: number
+}
+
+export interface FurnitureRotateDragState {
+  kind: 'furnitureRotate'
+  id: string
+  center: Point
+  originalRotation: number
+  currentRotation: number
+}
+
+export type DragState =
+  | WallDragState
+  | VertexDragState
+  | RoomDragState
+  | InteriorWallEndpointDragState
+  | InteriorWallBodyDragState
+  | FurnitureMoveDragState
+  | FurnitureResizeDragState
+  | FurnitureRotateDragState
 
 /** SelectTool's interaction state machine. Lives in the store (rather than a
  * tool-module-level `let`) so it's inspectable and can't drift out of sync
  * with re-renders. */
-export type InteractionMode = 'idle' | 'marquee' | 'wall' | 'vertex' | 'room'
+export type InteractionMode =
+  | 'idle'
+  | 'marquee'
+  | 'wall'
+  | 'vertex'
+  | 'room'
+  | 'interiorWallEndpoint'
+  | 'interiorWallBody'
+  | 'furnitureMove'
+  | 'furnitureResize'
+  | 'furnitureRotate'
 
 interface UIStore {
   activeTool: Tool
   selectedIds: string[]
   selectedWall: SelectedWall | null
+  selectedInteriorWall: SelectedInteriorWall | null
   showGrid: boolean
   drawingState: DrawingState | null
   marquee: MarqueeState | null
@@ -101,6 +186,7 @@ interface UIStore {
   addToSelection: (id: string) => void
   clearSelection: () => void
   setSelectedWall: (wall: SelectedWall | null) => void
+  setSelectedInteriorWall: (wall: SelectedInteriorWall | null) => void
   toggleGrid: () => void
   setDrawingState: (state: DrawingState | null) => void
   setMarquee: (marquee: MarqueeState | null) => void
@@ -117,6 +203,7 @@ interface UIStore {
 export const TOOL_LABELS: Record<Tool, string> = {
   select: 'Select',
   room: 'Room',
+  interiorWall: 'Interior Wall',
   image: 'Image',
   annotation: 'Annotation',
 }
@@ -140,11 +227,16 @@ export function getToolHint(activeTool: Tool, drawingState: DrawingState | null)
   if (drawingState?.kind === 'imageOrigin') {
     return 'Image: click to place the top-left corner'
   }
+  if (drawingState?.kind === 'interiorWall') {
+    return 'Interior Wall: click to place the second point'
+  }
   switch (activeTool) {
     case 'select':
       return 'Select: click to select, drag to marquee-select'
     case 'room':
       return 'Room: click to start drawing'
+    case 'interiorWall':
+      return 'Interior Wall: click a point inside a room to start'
     case 'image':
       return 'Image: import a photo, then calibrate its scale'
     case 'annotation':
@@ -158,6 +250,7 @@ export const useUIStore = create<UIStore>((set) => ({
   activeTool: 'select',
   selectedIds: [],
   selectedWall: null,
+  selectedInteriorWall: null,
   showGrid: true,
   drawingState: null,
   marquee: null,
@@ -184,16 +277,18 @@ export const useUIStore = create<UIStore>((set) => ({
       activeTool: tool,
       selectedIds: [],
       selectedWall: null,
+      selectedInteriorWall: null,
       drawingState: null,
       marquee: null,
       dragState: null,
       interactionMode: 'idle',
       dragAnchorWorld: null,
     }),
-  setSelection: (ids) => set({ selectedIds: ids, selectedWall: null }),
+  setSelection: (ids) => set({ selectedIds: ids, selectedWall: null, selectedInteriorWall: null }),
   addToSelection: (id) => set((s) => ({ selectedIds: [...s.selectedIds, id] })),
-  clearSelection: () => set({ selectedIds: [], selectedWall: null }),
+  clearSelection: () => set({ selectedIds: [], selectedWall: null, selectedInteriorWall: null }),
   setSelectedWall: (wall) => set({ selectedWall: wall }),
+  setSelectedInteriorWall: (wall) => set({ selectedInteriorWall: wall }),
   toggleGrid: () => set((s) => ({ showGrid: !s.showGrid })),
   setDrawingState: (state) => set({ drawingState: state }),
   setMarquee: (marquee) => set({ marquee }),

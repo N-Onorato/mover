@@ -71,11 +71,12 @@ function handleSelectAll() {
 }
 
 function handleDeleteSelected() {
-  const { selectedIds, clearSelection } = useUIStore.getState()
-  if (selectedIds.length === 0) return
+  const { selectedIds, selectedInteriorWall, clearSelection } = useUIStore.getState()
+  const ids = selectedInteriorWall ? [...selectedIds, selectedInteriorWall.wallId] : selectedIds
+  if (ids.length === 0) return
   const { project, removeEntities } = useProjectStore.getState()
   useHistoryStore.getState().pushSnapshot(project)
-  removeEntities(selectedIds)
+  removeEntities(ids)
   clearSelection()
 }
 
@@ -237,7 +238,7 @@ export function MenuBar({ onOpenSettings }: MenuBarProps = {}) {
       }
       const mod = e.ctrlKey || e.metaKey
       if (!mod) {
-        if (e.key === 'Delete') handleDeleteSelected()
+        if (e.key === 'Delete' || e.key === 'Backspace') handleDeleteSelected()
         return
       }
       const key = e.key.toLowerCase()

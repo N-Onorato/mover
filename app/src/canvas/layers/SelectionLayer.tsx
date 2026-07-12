@@ -49,6 +49,45 @@ function CalibrationPreviewContents({ pixelsPerUnit, units }: Props) {
   )
 }
 
+function InteriorWallPreviewContents({ pixelsPerUnit, units }: Props) {
+  const drawingState = useUIStore((s) => s.drawingState)
+  const defaultWallThickness = useProjectStore((s) => s.project.settings.defaultWallThickness)
+  if (!drawingState || drawingState.kind !== 'interiorWall') return null
+  const { a, cursor } = drawingState
+  const ppu = pixelsPerUnit
+  if (!cursor) return null
+
+  return (
+    <>
+      <Line
+        points={[a.x * ppu, a.y * ppu, cursor.x * ppu, cursor.y * ppu]}
+        stroke="#4a9eff"
+        strokeWidth={2.5}
+        dash={[8, 5]}
+        opacity={0.9}
+        listening={false}
+      />
+      <Circle x={a.x * ppu} y={a.y * ppu} radius={4} fill="#4a9eff" listening={false} />
+      <Circle
+        x={cursor.x * ppu}
+        y={cursor.y * ppu}
+        radius={3}
+        fill="#fff"
+        stroke="#4a9eff"
+        strokeWidth={1.5}
+        listening={false}
+      />
+      <WallLengthLabel
+        a={a}
+        b={cursor}
+        ppu={ppu}
+        units={units}
+        wallThicknessWorld={defaultWallThickness}
+      />
+    </>
+  )
+}
+
 export function SelectionLayer({ pixelsPerUnit, units }: Props) {
   const drawingState = useUIStore((s) => s.drawingState)
   const marquee = useUIStore((s) => s.marquee)
@@ -75,6 +114,15 @@ export function SelectionLayer({ pixelsPerUnit, units }: Props) {
     return (
       <Layer listening={false}>
         <CalibrationPreviewContents pixelsPerUnit={pixelsPerUnit} units={units} />
+        {marqueeRect}
+      </Layer>
+    )
+  }
+
+  if (drawingState?.kind === 'interiorWall') {
+    return (
+      <Layer listening={false}>
+        <InteriorWallPreviewContents pixelsPerUnit={pixelsPerUnit} units={units} />
         {marqueeRect}
       </Layer>
     )

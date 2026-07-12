@@ -4,9 +4,12 @@ import type { KonvaEventObject } from 'konva/lib/Node'
 import { Stage } from 'react-konva'
 import { useProjectStore } from '../store/projectStore'
 import { useUIStore } from '../store/uiStore'
+import { useHistoryStore } from '../store/historyStore'
+import { findDefinition, createFurnitureInstance } from '../furniture/catalog'
 import { GridLayer } from './layers/GridLayer'
 import { ReferenceImageLayer } from './layers/ReferenceImageLayer'
 import { RoomLayer } from './layers/RoomLayer'
+import { InteriorWallLayer } from './layers/InteriorWallLayer'
 import { HighlightLayer } from './layers/HighlightLayer'
 import { FurnitureLayer } from './layers/FurnitureLayer'
 import { AnnotationLayer } from './layers/AnnotationLayer'
@@ -14,6 +17,7 @@ import { SelectionLayer } from './layers/SelectionLayer'
 import { Rulers } from './Rulers'
 import { SelectTool } from './tools/SelectTool'
 import { RoomTool } from './tools/RoomTool'
+import { InteriorWallTool } from './tools/InteriorWallTool'
 import { ImageTool } from './tools/ImageTool'
 import { AnnotationTool } from './tools/AnnotationTool'
 import type { ToolHandlers, PointerModifiers } from './tools/SelectTool'
@@ -28,6 +32,7 @@ const BASE_PIXELS_PER_UNIT = 10
 const TOOLS: Record<string, ToolHandlers> = {
   select: SelectTool,
   room: RoomTool,
+  interiorWall: InteriorWallTool,
   image: ImageTool,
   annotation: AnnotationTool,
 }
@@ -91,34 +96,48 @@ export function LayoutCanvas() {
     }
   }, [activeTool])
 
+  // We need a stable ref for view so event handlers don't capture stale
+  // closures. Pointer handlers are memoized (below) and would otherwise keep a
+  // stale view.x/view.y after a pan, since pixelsPerUnit only tracks scale.
+  // Reading the live view here keeps screen<->world round-trips consistent so
+  // the marquee and hit-tests stay glued to the cursor at any pan/zoom.
+  const viewRef = useRef(view)
+  viewRef.current = view
+
   // Holding Ctrl inverts the effective snap-to-grid setting for this pointer
   // event (snap on -> off, off -> on). Ctrl is used (not Shift) because Shift
   // is already used by SelectTool for marquee shift-add. Since the modifier
   // arrives on the same native MouseEvent that triggers this snap decision,
   // it's read directly here rather than tracked via a separate listener.
-  function getWorldPoint(e: KonvaEventObject<MouseEvent>): Point {
-    const stage = stageRef.current!
-    const pos = stage.getPointerPosition()!
-    // stage.getPointerPosition() is relative to the container; subtract pan offset
-    const stageLocalX = pos.x - view.x
-    const stageLocalY = pos.y - view.y
-    const worldRaw: Point = { x: stageLocalX / pixelsPerUnit, y: stageLocalY / pixelsPerUnit }
-    const wantsRaw = TOOLS[activeTool]?.wantsRawPointer?.() ?? false
-    const effectiveSnap = e.evt.ctrlKey ? !settings.snapToGrid : settings.snapToGrid
-    if (effectiveSnap && !wantsRaw) {
-      const gridSpacing = adaptiveGridSize(settings.gridSize, view.scale)
-      return snapToGrid(worldRaw, gridSpacing)
-    }
-    return worldRaw
-  }
+  const getWorldPoint = useCallback(
+    (e: KonvaEventObject<MouseEvent>): Point => {
+      const stage = stageRef.current!
+      const pos = stage.getPointerPosition()!
+      // stage.getPointerPosition() is relative to the container (no stage
+      // transform applied); subtract the live pan offset and divide by the
+      // live pixels-per-unit to reach world space.
+      const v = viewRef.current
+      const ppu = BASE_PIXELS_PER_UNIT * v.scale
+      const worldRaw: Point = { x: (pos.x - v.x) / ppu, y: (pos.y - v.y) / ppu }
+      const wantsRaw = TOOLS[activeTool]?.wantsRawPointer?.() ?? false
+      const effectiveSnap = e.evt.ctrlKey ? !settings.snapToGrid : settings.snapToGrid
+      if (effectiveSnap && !wantsRaw) {
+        const gridSpacing = adaptiveGridSize(settings.gridSize, v.scale)
+        return snapToGrid(worldRaw, gridSpacing)
+      }
+      return worldRaw
+    },
+    [activeTool, settings],
+  )
 
   function getModifiers(e: KonvaEventObject<MouseEvent>): PointerModifiers {
     return { shift: e.evt.shiftKey, ctrl: e.evt.ctrlKey }
   }
 
-  // We need a stable ref for view so event handlers don't capture stale closures
-  const viewRef = useRef(view)
-  viewRef.current = view
+  // Live pixels-per-unit for tool dispatch, read from viewRef so hit-test
+  // thresholds (which are px/ppu) match the current zoom even when the memoized
+  // handlers haven't been recreated.
+  const livePpu = () => BASE_PIXELS_PER_UNIT * viewRef.current.scale
 
   const handleMouseDown = useCallback(
     (e: KonvaEventObject<MouseEvent>) => {
@@ -140,10 +159,10 @@ export function LayoutCanvas() {
       }
       if (button === 0) {
         const worldPt = getWorldPoint(e)
-        TOOLS[activeTool]?.onPointerDown(worldPt, pixelsPerUnit, getModifiers(e))
+        TOOLS[activeTool]?.onPointerDown(worldPt, livePpu(), getModifiers(e))
       }
     },
-    [activeTool, pixelsPerUnit, settings],
+    [activeTool, getWorldPoint],
   )
 
   const handleMouseMove = useCallback(
@@ -155,9 +174,9 @@ export function LayoutCanvas() {
         return
       }
       const worldPt = getWorldPoint(e)
-      TOOLS[activeTool]?.onPointerMove(worldPt, pixelsPerUnit, getModifiers(e))
+      TOOLS[activeTool]?.onPointerMove(worldPt, livePpu(), getModifiers(e))
     },
-    [activeTool, pixelsPerUnit, settings, setView],
+    [activeTool, getWorldPoint, setView],
   )
 
   const handleMouseUp = useCallback(
@@ -168,11 +187,40 @@ export function LayoutCanvas() {
       }
       if (e.evt.button === 0) {
         const worldPt = getWorldPoint(e)
-        TOOLS[activeTool]?.onPointerUp(worldPt, pixelsPerUnit, getModifiers(e))
+        TOOLS[activeTool]?.onPointerUp(worldPt, livePpu(), getModifiers(e))
       }
     },
-    [activeTool, pixelsPerUnit, settings],
+    [activeTool, getWorldPoint],
   )
+
+  function handleDragOver(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault()
+  }
+
+  function handleDrop(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault()
+    const defId = e.dataTransfer.getData('application/mover-furniture')
+    if (!defId) return
+    const def = findDefinition(defId)
+    if (!def) return
+
+    const rect = containerRef.current?.getBoundingClientRect()
+    if (!rect) return
+    const v = viewRef.current
+    const ppu = BASE_PIXELS_PER_UNIT * v.scale
+    const worldRaw: Point = {
+      x: (e.clientX - rect.left - v.x) / ppu,
+      y: (e.clientY - rect.top - v.y) / ppu,
+    }
+    const worldPt = settings.snapToGrid
+      ? snapToGrid(worldRaw, adaptiveGridSize(settings.gridSize, v.scale))
+      : worldRaw
+
+    useHistoryStore.getState().pushSnapshot(useProjectStore.getState().project)
+    const instance = createFurnitureInstance(def, worldPt)
+    useProjectStore.getState().addFurniture(instance)
+    useUIStore.getState().setSelection([instance.id])
+  }
 
   function handleWheel(e: React.WheelEvent<HTMLDivElement>) {
     e.preventDefault()
@@ -190,13 +238,16 @@ export function LayoutCanvas() {
   }
 
   // Cursor style based on active tool and panning state
-  const cursorStyle = activeTool === 'room' ? 'crosshair' : 'default'
+  const cursorStyle =
+    activeTool === 'room' || activeTool === 'interiorWall' ? 'crosshair' : 'default'
 
   return (
     <div
       ref={containerRef}
       className={styles.container}
       onWheel={handleWheel}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
       style={{ background: backgroundColor, cursor: cursorStyle }}
     >
       <Stage
@@ -225,6 +276,7 @@ export function LayoutCanvas() {
         )}
         <ReferenceImageLayer pixelsPerUnit={pixelsPerUnit} />
         <RoomLayer pixelsPerUnit={pixelsPerUnit} />
+        <InteriorWallLayer pixelsPerUnit={pixelsPerUnit} units={settings.units} />
         <HighlightLayer pixelsPerUnit={pixelsPerUnit} />
         <FurnitureLayer pixelsPerUnit={pixelsPerUnit} />
         <AnnotationLayer />

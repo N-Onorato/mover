@@ -42,15 +42,18 @@ export function polygonBoundingBox(points: Point[]): { x: number; y: number; wid
   return { x: minX, y: minY, width: Math.max(...xs) - minX, height: Math.max(...ys) - minY }
 }
 
-export function distanceToSegment(pt: Point, a: Point, b: Point): number {
+export function closestPointOnSegment(pt: Point, a: Point, b: Point): Point {
   const dx = b.x - a.x
   const dy = b.y - a.y
   const lengthSq = dx * dx + dy * dy
-  if (lengthSq === 0) return distance(pt, a)
+  if (lengthSq === 0) return a
   let t = ((pt.x - a.x) * dx + (pt.y - a.y) * dy) / lengthSq
   t = Math.max(0, Math.min(1, t))
-  const closest: Point = { x: a.x + t * dx, y: a.y + t * dy }
-  return distance(pt, closest)
+  return { x: a.x + t * dx, y: a.y + t * dy }
+}
+
+export function distanceToSegment(pt: Point, a: Point, b: Point): number {
+  return distance(pt, closestPointOnSegment(pt, a, b))
 }
 
 export function pointsEqual(a: Point[], b: Point[]): boolean {
@@ -65,4 +68,16 @@ export function rectPoints(x: number, y: number, w: number, h: number): Point[] 
     { x: x + w, y: y + h },
     { x, y: y + h },
   ]
+}
+
+export function rotatePoint(pt: Point, center: Point, degrees: number): Point {
+  const rad = degrees * (Math.PI / 180)
+  const cos = Math.cos(rad)
+  const sin = Math.sin(rad)
+  const dx = pt.x - center.x
+  const dy = pt.y - center.y
+  return {
+    x: center.x + dx * cos - dy * sin,
+    y: center.y + dx * sin + dy * cos,
+  }
 }
