@@ -9,6 +9,13 @@ export interface ViewState {
   scale: number
 }
 
+// Pan offset so world (0,0) lands a bit in from the container's top-left
+// corner instead of exactly under the ruler corner box, where it's
+// invisible on a fresh load. RULER_THICKNESS (canvas/Rulers.tsx) clears the
+// ruler overlay; the rest leaves ~1ft of world space visible above/left of
+// the origin at the default 10px/ft (BASE_PIXELS_PER_UNIT) scale.
+export const DEFAULT_VIEW: ViewState = { x: 30, y: 30, scale: 1 }
+
 export interface RoomDrawingState {
   kind: 'room'
   points: Point[]       // committed vertices in world space
@@ -68,13 +75,6 @@ export interface VertexDragState {
   currentPoints: Point[]
 }
 
-export interface RoomDragState {
-  kind: 'room'
-  roomIds: string[] // all rooms being dragged together (single room, or a multi-select)
-  originalPointsById: Record<string, Point[]> // room.points snapshot at drag start, keyed by room id
-  currentPointsById: Record<string, Point[]> // live-updated preview during drag, keyed by room id
-}
-
 export interface InteriorWallEndpointDragState {
   kind: 'interiorWallEndpoint'
   wallId: string
@@ -83,24 +83,6 @@ export interface InteriorWallEndpointDragState {
   originalB: Point
   currentA: Point
   currentB: Point
-}
-
-export interface InteriorWallBodyDragState {
-  kind: 'interiorWallBody'
-  wallId: string
-  originalA: Point
-  originalB: Point
-  currentA: Point
-  currentB: Point
-}
-
-export interface FurnitureMoveDragState {
-  kind: 'furnitureMove'
-  id: string
-  originalX: number
-  originalY: number
-  currentX: number
-  currentY: number
 }
 
 export interface FurnitureResizeDragState {
@@ -126,15 +108,34 @@ export interface FurnitureRotateDragState {
   currentRotation: number
 }
 
+/** The single rigid-translation drag path for rooms, furniture, and interior
+ * walls: dragging any selected room/furniture/interior-wall body moves every
+ * selected item of every type together (a lone selected item is just the
+ * one-element case), preserving relative positions. Interior walls anchored
+ * to a selected room ride along automatically even when not themselves
+ * selected. Shape/rotation edits (vertex, wall-edge, furniture resize/rotate,
+ * interior-wall endpoint) aren't rigid translations and keep their own
+ * dedicated drag states below instead of folding into this one. */
+export interface MultiDragState {
+  kind: 'multi'
+  roomIds: string[]
+  originalRoomPointsById: Record<string, Point[]>
+  currentRoomPointsById: Record<string, Point[]>
+  furnitureIds: string[]
+  originalFurniturePosById: Record<string, Point>
+  currentFurniturePosById: Record<string, Point>
+  wallIds: string[]
+  originalWallById: Record<string, { a: Point; b: Point }>
+  currentWallById: Record<string, { a: Point; b: Point }>
+}
+
 export type DragState =
   | WallDragState
   | VertexDragState
-  | RoomDragState
   | InteriorWallEndpointDragState
-  | InteriorWallBodyDragState
-  | FurnitureMoveDragState
   | FurnitureResizeDragState
   | FurnitureRotateDragState
+  | MultiDragState
 
 /** SelectTool's interaction state machine. Lives in the store (rather than a
  * tool-module-level `let`) so it's inspectable and can't drift out of sync
@@ -144,12 +145,10 @@ export type InteractionMode =
   | 'marquee'
   | 'wall'
   | 'vertex'
-  | 'room'
   | 'interiorWallEndpoint'
-  | 'interiorWallBody'
-  | 'furnitureMove'
   | 'furnitureResize'
   | 'furnitureRotate'
+  | 'multi'
 
 interface UIStore {
   activeTool: Tool
@@ -277,7 +276,7 @@ export const useUIStore = create<UIStore>((set) => ({
     furniture: false,
     annotations: false,
   },
-  view: { x: 0, y: 0, scale: 1 },
+  view: DEFAULT_VIEW,
 
   setActiveTool: (tool) =>
     set({

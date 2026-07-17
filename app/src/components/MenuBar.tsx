@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useProjectStore } from '../store/projectStore'
-import { useUIStore } from '../store/uiStore'
+import { useUIStore, DEFAULT_VIEW } from '../store/uiStore'
 import { useHistoryStore } from '../store/historyStore'
 import { downloadProject } from '../io/save'
 import { openProjectFile, LoadError } from '../io/load'
@@ -166,7 +166,7 @@ function buildMenus({
         {
           label: 'Reset Zoom',
           shortcut: `${modKey}+0`,
-          onSelect: () => useUIStore.getState().setView({ x: 0, y: 0, scale: 1 }),
+          onSelect: () => useUIStore.getState().setView(DEFAULT_VIEW),
         },
         'separator',
         {
@@ -238,7 +238,12 @@ export function MenuBar({ onOpenSettings }: MenuBarProps = {}) {
       }
       const mod = e.ctrlKey || e.metaKey
       if (!mod) {
-        if (e.key === 'Delete' || e.key === 'Backspace') handleDeleteSelected()
+        if (e.key === 'Delete' || e.key === 'Backspace') {
+          // Some browsers treat Backspace outside an editable field as
+          // "navigate back" - preventDefault so it never fights with delete.
+          e.preventDefault()
+          handleDeleteSelected()
+        }
         return
       }
       const key = e.key.toLowerCase()

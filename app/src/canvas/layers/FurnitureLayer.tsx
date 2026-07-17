@@ -24,16 +24,17 @@ export function FurnitureLayer({ pixelsPerUnit: ppu }: Props) {
         let width = f.width
         let depth = f.depth
         let rotation = f.rotation
-        if (dragState?.kind === 'furnitureMove' && dragState.id === f.id) {
-          x = dragState.currentX
-          y = dragState.currentY
-        } else if (dragState?.kind === 'furnitureResize' && dragState.id === f.id) {
+        if (dragState?.kind === 'furnitureResize' && dragState.id === f.id) {
           x = dragState.currentX
           y = dragState.currentY
           width = dragState.currentWidth
           depth = dragState.currentDepth
         } else if (dragState?.kind === 'furnitureRotate' && dragState.id === f.id) {
           rotation = dragState.currentRotation
+        } else if (dragState?.kind === 'multi' && dragState.currentFurniturePosById[f.id]) {
+          const pos = dragState.currentFurniturePosById[f.id]
+          x = pos.x
+          y = pos.y
         }
 
         const cx = (x + width / 2) * ppu

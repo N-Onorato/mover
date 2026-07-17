@@ -29,13 +29,10 @@ export function RoomLayer({ pixelsPerUnit }: Props) {
         // of a single roomId field.
         let effectivePoints: Point[] = room.points
         if (dragState) {
-          if (dragState.kind === 'room') {
-            effectivePoints = dragState.currentPointsById[room.id] ?? room.points
-          } else if (
-            (dragState.kind === 'wall' || dragState.kind === 'vertex') &&
-            dragState.roomId === room.id
-          ) {
+          if ((dragState.kind === 'wall' || dragState.kind === 'vertex') && dragState.roomId === room.id) {
             effectivePoints = dragState.currentPoints
+          } else if (dragState.kind === 'multi') {
+            effectivePoints = dragState.currentRoomPointsById[room.id] ?? room.points
           }
         }
 
