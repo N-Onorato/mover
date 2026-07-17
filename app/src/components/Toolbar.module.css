@@ -44,7 +44,7 @@
   font-size: 13px;
 }
 
-.zoom button {
+.zoomBtn {
   background: #333;
   border: none;
   color: #eee;
@@ -56,7 +56,7 @@
   line-height: 1;
 }
 
-.zoom button:hover {
+.zoomBtn:hover {
   background: #444;
 }
 
@@ -83,7 +83,7 @@
     padding: 8px 10px;
   }
 
-  .zoom button {
+  .zoomBtn {
     width: 32px;
     height: 32px;
   }

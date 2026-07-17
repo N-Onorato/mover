@@ -57,9 +57,19 @@ export function Toolbar({ onToggleCatalog, onTogglePanels }: Props = {}) {
         >
           Snap
         </button>
-        <button onClick={() => setView({ ...view, scale: Math.min(10, view.scale * 1.2) })}>+</button>
+        <button
+          className={styles.zoomBtn}
+          onClick={() => setView({ ...view, scale: Math.min(10, view.scale * 1.2) })}
+        >
+          +
+        </button>
         <span>{Math.round(view.scale * 100)}%</span>
-        <button onClick={() => setView({ ...view, scale: Math.max(0.1, view.scale / 1.2) })}>-</button>
+        <button
+          className={styles.zoomBtn}
+          onClick={() => setView({ ...view, scale: Math.max(0.1, view.scale / 1.2) })}
+        >
+          -
+        </button>
         {onTogglePanels && (
           <button className={styles.toolBtn} onClick={onTogglePanels}>
             Panels
