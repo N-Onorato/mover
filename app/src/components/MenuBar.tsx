@@ -66,17 +66,17 @@ function handleSelectAll() {
     ...(lockedLayers.rooms ? [] : project.rooms.map((r) => r.id)),
     ...(lockedLayers.furniture ? [] : project.furnitureInstances.map((f) => f.id)),
     ...(lockedLayers.annotations ? [] : project.annotations.map((a) => a.id)),
+    ...(lockedLayers.referenceImages ? [] : project.referenceImages.map((img) => img.id)),
   ]
   setSelection(ids)
 }
 
 function handleDeleteSelected() {
-  const { selectedIds, selectedInteriorWall, clearSelection } = useUIStore.getState()
-  const ids = selectedInteriorWall ? [...selectedIds, selectedInteriorWall.wallId] : selectedIds
-  if (ids.length === 0) return
+  const { selectedIds, clearSelection } = useUIStore.getState()
+  if (selectedIds.length === 0) return
   const { project, removeEntities } = useProjectStore.getState()
   useHistoryStore.getState().pushSnapshot(project)
-  removeEntities(ids)
+  removeEntities(selectedIds)
   clearSelection()
 }
 

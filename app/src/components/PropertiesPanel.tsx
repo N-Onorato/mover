@@ -250,16 +250,14 @@ function FurnitureProperties({ instance }: { instance: FurnitureInstance }) {
 export function PropertiesPanel() {
   const selectedIds = useUIStore((s) => s.selectedIds)
   const selectedWall = useUIStore((s) => s.selectedWall)
-  const selectedInteriorWall = useUIStore((s) => s.selectedInteriorWall)
   const rooms = useProjectStore((s) => s.project.rooms)
   const interiorWalls = useProjectStore((s) => s.project.interiorWalls)
   const furnitureInstances = useProjectStore((s) => s.project.furnitureInstances)
 
   const selectedRoom =
     selectedIds.length === 1 ? rooms.find((r) => r.id === selectedIds[0]) : undefined
-  const selectedWallEntity = selectedInteriorWall
-    ? interiorWalls.find((w) => w.id === selectedInteriorWall.wallId)
-    : undefined
+  const selectedWallEntity =
+    selectedIds.length === 1 ? interiorWalls.find((w) => w.id === selectedIds[0]) : undefined
   const selectedFurniture =
     selectedIds.length === 1 ? furnitureInstances.find((f) => f.id === selectedIds[0]) : undefined
 

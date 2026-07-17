@@ -1,4 +1,4 @@
-import type { FurnitureInstance, Point } from '../../types/project'
+import type { FurnitureInstance, Point, ReferenceImage } from '../../types/project'
 import { useUIStore } from '../../store/uiStore'
 import { useProjectStore } from '../../store/projectStore'
 import { useHistoryStore } from '../../store/historyStore'
@@ -7,6 +7,7 @@ import {
   distance,
   distanceToSegment,
   pointInPolygon,
+  pointInRotatedRect,
   pointsEqual,
   rectPoints,
   rotatePoint,
@@ -24,7 +25,11 @@ export interface PointerModifiers {
 }
 
 export interface ToolHandlers {
-  onPointerDown(worldPt: Point, pixelsPerUnit: number, modifiers: PointerModifiers): void
+  /** rawWorldPt is the same pointer-down position as worldPt but never
+   * grid-snapped, regardless of wantsRawPointer() - hit-testing should always
+   * use it, since snapping the click location (rather than the eventual
+   * placed/dragged position) has no upside for hit-testing precision. */
+  onPointerDown(worldPt: Point, rawWorldPt: Point, pixelsPerUnit: number, modifiers: PointerModifiers): void
   onPointerMove(worldPt: Point, pixelsPerUnit: number, modifiers: PointerModifiers): void
   onPointerUp(worldPt: Point, pixelsPerUnit: number, modifiers: PointerModifiers): void
   onKeyDown(e: KeyboardEvent): void
@@ -62,6 +67,12 @@ export function furnitureCorners(f: FurnitureInstance): Point[] {
   return rectPoints(f.x, f.y, f.width, f.depth).map((p) => rotatePoint(p, center, f.rotation))
 }
 
+/** The 4 rotated corners of a reference image, mirroring furnitureCorners. */
+export function imageCorners(img: Pick<ReferenceImage, 'x' | 'y' | 'width' | 'height' | 'rotation'>): Point[] {
+  const center = { x: img.x + img.width / 2, y: img.y + img.height / 2 }
+  return rectPoints(img.x, img.y, img.width, img.height).map((p) => rotatePoint(p, center, img.rotation))
+}
+
 /** The rotate handle's world position: a fixed pixel offset above the
  * instance's top-mid edge, then rotated with the instance. */
 export function furnitureRotateHandle(f: FurnitureInstance, ppu: number): Point {
@@ -77,19 +88,17 @@ let lastClickMs = 0
 let lastClickEdge: { roomId: string; edgeIndex: number } | null = null
 
 export const SelectTool: ToolHandlers = {
-  onPointerDown(worldPt: Point, ppu: number, modifiers: PointerModifiers) {
+  onPointerDown(worldPt: Point, rawWorldPt: Point, ppu: number, modifiers: PointerModifiers) {
     const { setInteractionMode, setDragAnchorWorld } = useUIStore.getState()
     setInteractionMode('idle')
     setDragAnchorWorld(null)
 
-    const { rooms, interiorWalls, furnitureInstances } = useProjectStore.getState().project
+    const { rooms, interiorWalls, furnitureInstances, referenceImages } = useProjectStore.getState().project
     const {
       lockedLayers,
       selectedIds,
       setSelection,
       setSelectedWall,
-      setSelectedInteriorWall,
-      clearSelection,
       setDragState,
       setMarquee,
     } = useUIStore.getState()
@@ -101,7 +110,7 @@ export const SelectTool: ToolHandlers = {
       const selectedFurniture = furnitureInstances.find((f) => f.id === selectedIds[0])
       if (selectedFurniture && selectedFurniture.visible && !selectedFurniture.locked) {
         const rotateHandle = furnitureRotateHandle(selectedFurniture, ppu)
-        if (distance(worldPt, rotateHandle) <= FURNITURE_ROTATE_HANDLE_HIT_THRESHOLD_PX / ppu) {
+        if (distance(rawWorldPt, rotateHandle) <= FURNITURE_ROTATE_HANDLE_HIT_THRESHOLD_PX / ppu) {
           setDragState({
             kind: 'furnitureRotate',
             id: selectedFurniture.id,
@@ -116,7 +125,7 @@ export const SelectTool: ToolHandlers = {
 
         const corners = furnitureCorners(selectedFurniture)
         for (let ci = 0; ci < corners.length; ci++) {
-          if (distance(worldPt, corners[ci]) <= FURNITURE_HANDLE_HIT_THRESHOLD_PX / ppu) {
+          if (distance(rawWorldPt, corners[ci]) <= FURNITURE_HANDLE_HIT_THRESHOLD_PX / ppu) {
             setDragState({
               kind: 'furnitureResize',
               id: selectedFurniture.id,
@@ -148,17 +157,8 @@ export const SelectTool: ToolHandlers = {
       for (let fi = furnitureInstances.length - 1; fi >= 0; fi--) {
         const f = furnitureInstances[fi]
         if (!f.visible || f.locked) continue
-        const center = furnitureCenter(f)
-        const localPt = rotatePoint(worldPt, center, -f.rotation)
-        if (
-          localPt.x >= f.x &&
-          localPt.x <= f.x + f.width &&
-          localPt.y >= f.y &&
-          localPt.y <= f.y + f.depth
-        ) {
+        if (pointInRotatedRect(rawWorldPt, { x: f.x, y: f.y, width: f.width, height: f.depth }, f.rotation)) {
           setSelection([f.id])
-          setSelectedWall(null)
-          setSelectedInteriorWall(null)
           setDragState({
             kind: 'furnitureMove',
             id: f.id,
@@ -175,7 +175,12 @@ export const SelectTool: ToolHandlers = {
       }
     }
 
-    if (!lockedLayers.rooms) {
+    // Read once and reused below (5.5's reference-image test sits between
+    // this room block and the marquee fallback, but is independently gated
+    // by lockedLayers.referenceImages so it needed to leave this condition).
+    const roomsUnlocked = !lockedLayers.rooms
+
+    if (roomsUnlocked) {
       // 1. Vertex hit test takes priority over edge hit test (vertices sit on
       // edges' endpoints).
       for (let ri = rooms.length - 1; ri >= 0; ri--) {
@@ -184,7 +189,7 @@ export const SelectTool: ToolHandlers = {
         const pts = room.points
         const vertexThresholdWorld = wallThresholdWorld(VERTEX_HIT_THRESHOLD_PX, room.wallThickness, ppu)
         for (let vi = 0; vi < pts.length; vi++) {
-          if (distance(worldPt, pts[vi]) <= vertexThresholdWorld) {
+          if (distance(rawWorldPt, pts[vi]) <= vertexThresholdWorld) {
             setSelection([room.id])
             setSelectedWall(null)
             setDragState({
@@ -211,7 +216,7 @@ export const SelectTool: ToolHandlers = {
         for (let i = 0; i < pts.length; i++) {
           const a = pts[i]
           const b = pts[(i + 1) % pts.length]
-          if (distanceToSegment(worldPt, a, b) <= thresholdWorld) {
+          if (distanceToSegment(rawWorldPt, a, b) <= thresholdWorld) {
             const now = Date.now()
             const doubleClicked =
               isDoubleClick(lastClickMs, now) &&
@@ -261,15 +266,13 @@ export const SelectTool: ToolHandlers = {
         if (!parentRoom || !parentRoom.visible || parentRoom.locked) continue
         const vertexThresholdWorld = wallThresholdWorld(VERTEX_HIT_THRESHOLD_PX, wall.thickness, ppu)
         const which: 'a' | 'b' | null =
-          distance(worldPt, wall.a) <= vertexThresholdWorld
+          distance(rawWorldPt, wall.a) <= vertexThresholdWorld
             ? 'a'
-            : distance(worldPt, wall.b) <= vertexThresholdWorld
+            : distance(rawWorldPt, wall.b) <= vertexThresholdWorld
               ? 'b'
               : null
         if (which) {
-          setSelection([])
-          setSelectedWall(null)
-          setSelectedInteriorWall({ wallId: wall.id })
+          setSelection([wall.id])
           setDragState({
             kind: 'interiorWallEndpoint',
             wallId: wall.id,
@@ -292,10 +295,8 @@ export const SelectTool: ToolHandlers = {
         const parentRoom = rooms.find((r) => r.id === wall.roomId)
         if (!parentRoom || !parentRoom.visible || parentRoom.locked) continue
         const thresholdWorld = wallThresholdWorld(WALL_HIT_THRESHOLD_PX, wall.thickness, ppu)
-        if (distanceToSegment(worldPt, wall.a, wall.b) <= thresholdWorld) {
-          setSelection([])
-          setSelectedWall(null)
-          setSelectedInteriorWall({ wallId: wall.id })
+        if (distanceToSegment(rawWorldPt, wall.a, wall.b) <= thresholdWorld) {
+          setSelection([wall.id])
           setDragState({
             kind: 'interiorWallBody',
             wallId: wall.id,
@@ -317,7 +318,7 @@ export const SelectTool: ToolHandlers = {
       for (let ri = rooms.length - 1; ri >= 0; ri--) {
         const room = rooms[ri]
         if (!room.visible || room.locked) continue
-        if (pointInPolygon(worldPt, room.points)) {
+        if (pointInPolygon(rawWorldPt, room.points)) {
           const isMultiSelected = selectedIds.length > 1 && selectedIds.includes(room.id)
           const roomIds = isMultiSelected
             ? selectedIds.filter((id) => {
@@ -347,17 +348,33 @@ export const SelectTool: ToolHandlers = {
           return
         }
       }
-
-      // 6. Nothing hit: begin a marquee drag. Whether this ends up being a
-      // plain click (deselect) or an actual drag (box-select) is resolved on
-      // pointer-up, once we know the total drag distance.
-      lastClickEdge = null
-      setInteractionMode('marquee')
-      setMarquee({ start: worldPt, end: worldPt, additive: modifiers.shift })
-      return
     }
 
-    clearSelection()
+    // 5.5. Reference image hit test (I3) - images render beneath
+    // rooms/furniture, so this runs after those hit tests fail to find
+    // anything. Gated independently by lockedLayers.referenceImages (not
+    // lockedLayers.rooms), same as the furniture body test above.
+    if (!lockedLayers.referenceImages) {
+      for (let ii = referenceImages.length - 1; ii >= 0; ii--) {
+        const img = referenceImages[ii]
+        if (!img.visible || img.locked) continue
+        if (pointInRotatedRect(rawWorldPt, img, img.rotation)) {
+          setSelection([img.id])
+          lastClickEdge = null
+          return
+        }
+      }
+    }
+
+    // 6. Nothing hit: begin a marquee drag. Whether this ends up being a
+    // plain click (deselect) or an actual drag (box-select) is resolved on
+    // pointer-up, once we know the total drag distance. This always starts,
+    // regardless of any layer's lock state - locked layers only affect which
+    // entities the marquee can pick up on release (step 3 below), not
+    // whether a marquee can be drawn at all.
+    lastClickEdge = null
+    setInteractionMode('marquee')
+    setMarquee({ start: worldPt, end: worldPt, additive: modifiers.shift })
   },
 
   onPointerMove(worldPt: Point, _ppu: number, modifiers: PointerModifiers) {
@@ -524,11 +541,12 @@ export const SelectTool: ToolHandlers = {
 
     if (mode === 'marquee' && marquee && endPt) {
       const movedWorld = distance(marquee.start, marquee.end)
-      const { rooms } = useProjectStore.getState().project
+      const { rooms, interiorWalls, furnitureInstances, referenceImages } = useProjectStore.getState().project
       const minX = Math.min(marquee.start.x, marquee.end.x)
       const maxX = Math.max(marquee.start.x, marquee.end.x)
       const minY = Math.min(marquee.start.y, marquee.end.y)
       const maxY = Math.max(marquee.start.y, marquee.end.y)
+      const inBox = (p: Point) => p.x >= minX && p.x <= maxX && p.y >= minY && p.y <= maxY
 
       const wasDrag = movedWorld * ppu >= MARQUEE_MIN_DRAG_PX
 
@@ -537,14 +555,42 @@ export const SelectTool: ToolHandlers = {
         if (!marquee.additive) clearSelection()
       } else {
         const { lockedLayers } = useUIStore.getState()
-        const hitIds = lockedLayers.rooms
+
+        const roomIds = lockedLayers.rooms
           ? []
           : rooms
               .filter((r) => r.visible && !r.locked)
-              .filter((r) =>
-                r.points.every((p) => p.x >= minX && p.x <= maxX && p.y >= minY && p.y <= maxY),
-              )
+              .filter((r) => r.points.every(inBox))
               .map((r) => r.id)
+
+        const furnitureIds = lockedLayers.furniture
+          ? []
+          : furnitureInstances
+              .filter((f) => f.visible && !f.locked)
+              .filter((f) => furnitureCorners(f).every(inBox))
+              .map((f) => f.id)
+
+        // Interior walls belong to their parent room's layer - there's no
+        // separate lockedLayers entry for them, matching the click-select
+        // hit tests above (steps 3/4).
+        const interiorWallIds = lockedLayers.rooms
+          ? []
+          : interiorWalls
+              .filter((w) => {
+                const parentRoom = rooms.find((r) => r.id === w.roomId)
+                return !!parentRoom && parentRoom.visible && !parentRoom.locked
+              })
+              .filter((w) => inBox(w.a) && inBox(w.b))
+              .map((w) => w.id)
+
+        const imageIds = lockedLayers.referenceImages
+          ? []
+          : referenceImages
+              .filter((img) => img.visible && !img.locked)
+              .filter((img) => imageCorners(img).every(inBox))
+              .map((img) => img.id)
+
+        const hitIds = [...roomIds, ...furnitureIds, ...interiorWallIds, ...imageIds]
 
         if (marquee.additive) {
           const merged = Array.from(new Set([...selectedIds, ...hitIds]))

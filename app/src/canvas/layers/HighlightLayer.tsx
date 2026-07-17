@@ -6,6 +6,7 @@ import {
   FURNITURE_HANDLE_HIT_THRESHOLD_PX,
   furnitureCorners,
   furnitureRotateHandle,
+  imageCorners,
 } from '../tools/SelectTool'
 import { wallThresholdWorld } from '../../utils/wallThreshold'
 import type { FurnitureInstance } from '../../types/project'
@@ -25,18 +26,17 @@ const FURNITURE_HANDLE_RADIUS_PX = FURNITURE_HANDLE_HIT_THRESHOLD_PX - 3
 export function HighlightLayer({ pixelsPerUnit: ppu }: Props) {
   const selectedIds = useUIStore((s) => s.selectedIds)
   const selectedWall = useUIStore((s) => s.selectedWall)
-  const selectedInteriorWall = useUIStore((s) => s.selectedInteriorWall)
   const rooms = useProjectStore((s) => s.project.rooms)
   const interiorWalls = useProjectStore((s) => s.project.interiorWalls)
   const furnitureInstances = useProjectStore((s) => s.project.furnitureInstances)
+  const referenceImages = useProjectStore((s) => s.project.referenceImages)
   const dragState = useUIStore((s) => s.dragState)
 
   const selectedRoom =
     selectedIds.length === 1 ? rooms.find((r) => r.id === selectedIds[0]) : undefined
 
-  const selectedWallEntity = selectedInteriorWall
-    ? interiorWalls.find((w) => w.id === selectedInteriorWall.wallId)
-    : undefined
+  const selectedWallEntity =
+    selectedIds.length === 1 ? interiorWalls.find((w) => w.id === selectedIds[0]) : undefined
 
   const selectedFurnitureBase =
     selectedIds.length === 1 ? furnitureInstances.find((f) => f.id === selectedIds[0]) : undefined
@@ -64,6 +64,48 @@ export function HighlightLayer({ pixelsPerUnit: ppu }: Props) {
     dragState.id === selectedFurnitureBase.id
   ) {
     selectedFurniture = { ...selectedFurnitureBase, rotation: dragState.currentRotation }
+  }
+
+  // Multi-select: no resize/rotate/vertex handles (those only make sense for
+  // a single entity), just a plain outline per selected item so a marquee or
+  // shift-click selection is visually confirmed.
+  if (selectedIds.length > 1) {
+    const idSet = new Set(selectedIds)
+    const outlines: { points: number[]; closed: boolean }[] = []
+    for (const r of rooms) {
+      if (idSet.has(r.id)) outlines.push({ points: r.points.flatMap((p) => [p.x * ppu, p.y * ppu]), closed: true })
+    }
+    for (const f of furnitureInstances) {
+      if (idSet.has(f.id) && !f.locked) {
+        outlines.push({ points: furnitureCorners(f).flatMap((p) => [p.x * ppu, p.y * ppu]), closed: true })
+      }
+    }
+    for (const w of interiorWalls) {
+      if (idSet.has(w.id)) {
+        outlines.push({ points: [w.a.x * ppu, w.a.y * ppu, w.b.x * ppu, w.b.y * ppu], closed: false })
+      }
+    }
+    for (const img of referenceImages) {
+      if (idSet.has(img.id)) {
+        outlines.push({ points: imageCorners(img).flatMap((p) => [p.x * ppu, p.y * ppu]), closed: true })
+      }
+    }
+
+    return (
+      <Layer listening={false}>
+        {outlines.map((o, i) => (
+          <Line
+            key={i}
+            points={o.points}
+            closed={o.closed}
+            stroke="#ffb400"
+            strokeWidth={o.closed ? 2 : 4}
+            dash={[8, 4]}
+            listening={false}
+          />
+        ))}
+      </Layer>
+    )
   }
 
   if (!selectedRoom && !selectedWallEntity && !selectedFurniture) return <Layer listening={false} />

@@ -46,10 +46,6 @@ export interface SelectedWall {
   edgeIndex: number
 }
 
-export interface SelectedInteriorWall {
-  wallId: string
-}
-
 export interface MarqueeState {
   start: Point // world space
   end: Point // world space
@@ -159,7 +155,6 @@ interface UIStore {
   activeTool: Tool
   selectedIds: string[]
   selectedWall: SelectedWall | null
-  selectedInteriorWall: SelectedInteriorWall | null
   showGrid: boolean
   drawingState: DrawingState | null
   marquee: MarqueeState | null
@@ -191,7 +186,6 @@ interface UIStore {
   addToSelection: (id: string) => void
   clearSelection: () => void
   setSelectedWall: (wall: SelectedWall | null) => void
-  setSelectedInteriorWall: (wall: SelectedInteriorWall | null) => void
   toggleGrid: () => void
   setDrawingState: (state: DrawingState | null) => void
   setMarquee: (marquee: MarqueeState | null) => void
@@ -263,7 +257,6 @@ export const useUIStore = create<UIStore>((set) => ({
   activeTool: 'select',
   selectedIds: [],
   selectedWall: null,
-  selectedInteriorWall: null,
   showGrid: true,
   drawingState: null,
   marquee: null,
@@ -291,7 +284,6 @@ export const useUIStore = create<UIStore>((set) => ({
       activeTool: tool,
       selectedIds: [],
       selectedWall: null,
-      selectedInteriorWall: null,
       drawingState: null,
       marquee: null,
       dragState: null,
@@ -299,11 +291,10 @@ export const useUIStore = create<UIStore>((set) => ({
       dragAnchorWorld: null,
       pendingPlacementDefId: null,
     }),
-  setSelection: (ids) => set({ selectedIds: ids, selectedWall: null, selectedInteriorWall: null }),
+  setSelection: (ids) => set({ selectedIds: ids, selectedWall: null }),
   addToSelection: (id) => set((s) => ({ selectedIds: [...s.selectedIds, id] })),
-  clearSelection: () => set({ selectedIds: [], selectedWall: null, selectedInteriorWall: null }),
+  clearSelection: () => set({ selectedIds: [], selectedWall: null }),
   setSelectedWall: (wall) => set({ selectedWall: wall }),
-  setSelectedInteriorWall: (wall) => set({ selectedInteriorWall: wall }),
   toggleGrid: () => set((s) => ({ showGrid: !s.showGrid })),
   setDrawingState: (state) => set({ drawingState: state }),
   setMarquee: (marquee) => set({ marquee }),
