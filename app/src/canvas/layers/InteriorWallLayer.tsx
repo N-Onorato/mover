@@ -20,6 +20,12 @@ export function InteriorWallLayer({ pixelsPerUnit: ppu, units }: Props) {
   const rooms = useProjectStore((s) => s.project.rooms)
   const dragState = useUIStore((s) => s.dragState)
   const showWallLabels = useUIStore((s) => s.showWallLabels)
+  // E3: no dedicated uiStore.showLayers key for interior walls — they're
+  // room-scoped (already hidden per-wall when their parent room is hidden
+  // below), so piggyback on the rooms layer toggle.
+  const showLayer = useUIStore((s) => s.showLayers.rooms)
+
+  if (!showLayer) return <Layer />
 
   return (
     <Layer>

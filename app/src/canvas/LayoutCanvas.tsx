@@ -21,6 +21,7 @@ import type { PointerModifiers } from './tools/SelectTool'
 import type { Point } from '../types/project'
 import { snapToGrid } from '../utils/snap'
 import { adaptiveGridSize } from '../utils/snap'
+import { distance, midpoint } from '../utils/geometry'
 import { setStage } from './stageRegistry'
 import styles from './LayoutCanvas.module.css'
 
@@ -53,6 +54,8 @@ export function LayoutCanvas() {
   const pinchStart = useRef<{ dist: number; mid: Point; view: { x: number; y: number; scale: number } } | null>(null)
   const suppressTools = useRef(false)
   const touchDispatchedToTool = useRef(false)
+  // Cached for getContainerPoint - see its comment.
+  const containerRect = useRef<DOMRect | null>(null)
 
   // Sync container size
   useEffect(() => {
@@ -106,6 +109,26 @@ export function LayoutCanvas() {
   const viewRef = useRef(view)
   viewRef.current = view
 
+  // Container-relative screen position (no stage transform applied) to world
+  // space: subtract the live pan offset and divide by the live pixels-per-unit.
+  // Shared by getWorldPoint, tap-to-place, and drag-drop placement so the
+  // projection math has one definition.
+  const screenToWorld = useCallback((pos: Point): Point => {
+    const v = viewRef.current
+    const ppu = BASE_PIXELS_PER_UNIT * v.scale
+    return { x: (pos.x - v.x) / ppu, y: (pos.y - v.y) / ppu }
+  }, [])
+
+  const snappedScreenToWorld = useCallback(
+    (pos: Point): Point => {
+      const worldRaw = screenToWorld(pos)
+      return settings.snapToGrid
+        ? snapToGrid(worldRaw, adaptiveGridSize(settings.gridSize, viewRef.current.scale))
+        : worldRaw
+    },
+    [screenToWorld, settings],
+  )
+
   // Holding Ctrl inverts the effective snap-to-grid setting for this pointer
   // event (snap on -> off, off -> on). Ctrl is used (not Shift) because Shift
   // is already used by SelectTool for marquee shift-add. Since the modifier
@@ -115,21 +138,16 @@ export function LayoutCanvas() {
     (e: KonvaEventObject<PointerEvent>): Point => {
       const stage = stageRef.current!
       const pos = stage.getPointerPosition()!
-      // stage.getPointerPosition() is relative to the container (no stage
-      // transform applied); subtract the live pan offset and divide by the
-      // live pixels-per-unit to reach world space.
-      const v = viewRef.current
-      const ppu = BASE_PIXELS_PER_UNIT * v.scale
-      const worldRaw: Point = { x: (pos.x - v.x) / ppu, y: (pos.y - v.y) / ppu }
+      const worldRaw = screenToWorld(pos)
       const wantsRaw = TOOLS[activeTool]?.wantsRawPointer?.() ?? false
       const effectiveSnap = e.evt.ctrlKey ? !settings.snapToGrid : settings.snapToGrid
       if (effectiveSnap && !wantsRaw) {
-        const gridSpacing = adaptiveGridSize(settings.gridSize, v.scale)
+        const gridSpacing = adaptiveGridSize(settings.gridSize, viewRef.current.scale)
         return snapToGrid(worldRaw, gridSpacing)
       }
       return worldRaw
     },
-    [activeTool, settings],
+    [activeTool, settings, screenToWorld],
   )
 
   function getModifiers(e: KonvaEventObject<PointerEvent>): PointerModifiers {
@@ -139,8 +157,12 @@ export function LayoutCanvas() {
   // Container-relative position of a pointer event. Used for multi-touch
   // gesture math instead of stage.getPointerPosition(), which only tracks a
   // single position per event and can't distinguish two fingers.
+  // getBoundingClientRect() forces a layout read, so it's cached for the
+  // duration of a touch gesture (refreshed when the first finger goes down)
+  // rather than queried on every pointermove.
   function getContainerPoint(e: KonvaEventObject<PointerEvent>): Point {
-    const rect = containerRef.current!.getBoundingClientRect()
+    if (!containerRect.current) containerRect.current = containerRef.current!.getBoundingClientRect()
+    const rect = containerRect.current
     return { x: e.evt.clientX - rect.left, y: e.evt.clientY - rect.top }
   }
 
@@ -176,8 +198,8 @@ export function LayoutCanvas() {
           isPanning.current = false
           const [p1, p2] = [...touchPoints.current.values()]
           pinchStart.current = {
-            dist: Math.hypot(p2.x - p1.x, p2.y - p1.y),
-            mid: { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 },
+            dist: distance(p1, p2),
+            mid: midpoint(p1, p2),
             view: viewRef.current,
           }
           return
@@ -208,24 +230,20 @@ export function LayoutCanvas() {
         // tool: place the pending furniture at the tap point and disarm.
         const pendingDefId = useUIStore.getState().pendingPlacementDefId
         if (pendingDefId) {
-          const stage = stageRef.current!
-          const pos = stage.getPointerPosition()!
-          const v = viewRef.current
-          const ppu = BASE_PIXELS_PER_UNIT * v.scale
-          const worldRaw: Point = { x: (pos.x - v.x) / ppu, y: (pos.y - v.y) / ppu }
-          const worldPt = settings.snapToGrid
-            ? snapToGrid(worldRaw, adaptiveGridSize(settings.gridSize, v.scale))
-            : worldRaw
-          placeFurnitureAt(pendingDefId, worldPt)
+          const pos = stageRef.current!.getPointerPosition()!
+          placeFurnitureAt(pendingDefId, snappedScreenToWorld(pos))
           useUIStore.getState().setPendingPlacement(null)
           return
         }
         const worldPt = getWorldPoint(e)
-        TOOLS[activeTool]?.onPointerDown(worldPt, livePpu(), getModifiers(e))
+        const rawWorldPt = screenToWorld(stageRef.current!.getPointerPosition()!)
+        // TEMP DEBUG (J1 investigation) - remove once the marquee bug is found.
+        console.log('[J1] pointerDown', { activeTool, pointerType: e.evt.pointerType, button: e.evt.button, worldPt })
+        TOOLS[activeTool]?.onPointerDown(worldPt, rawWorldPt, livePpu(), getModifiers(e))
         if (e.evt.pointerType === 'touch') touchDispatchedToTool.current = true
       }
     },
-    [activeTool, getWorldPoint, placeFurnitureAt, settings],
+    [activeTool, getWorldPoint, placeFurnitureAt, snappedScreenToWorld, screenToWorld],
   )
 
   const handlePointerMove = useCallback(
@@ -237,8 +255,8 @@ export function LayoutCanvas() {
           // midpoint. All math is relative to the gesture's start state, so
           // a near-constant distance ratio degenerates into a pure pan.
           const [p1, p2] = [...touchPoints.current.values()]
-          const dist = Math.hypot(p2.x - p1.x, p2.y - p1.y)
-          const mid = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 }
+          const dist = distance(p1, p2)
+          const mid = midpoint(p1, p2)
           const start = pinchStart.current
           const ratio = start.dist > 0 ? dist / start.dist : 1
           const newScale = Math.min(10, Math.max(0.05, start.view.scale * ratio))
@@ -263,6 +281,15 @@ export function LayoutCanvas() {
         return
       }
       const worldPt = getWorldPoint(e)
+      // TEMP DEBUG (J1 investigation) - remove once the marquee bug is found.
+      console.log('[J1] pointerMove', {
+        activeTool,
+        pointerType: e.evt.pointerType,
+        buttons: e.evt.buttons,
+        mode: useUIStore.getState().interactionMode,
+        marquee: useUIStore.getState().marquee,
+        worldPt,
+      })
       TOOLS[activeTool]?.onPointerMove(worldPt, livePpu(), getModifiers(e))
     },
     [activeTool, getWorldPoint, setView],
@@ -276,6 +303,7 @@ export function LayoutCanvas() {
         // last finger is up so the remaining finger can't start drawing.
         if (pinchStart.current) pinchStart.current = null
         if (touchPoints.current.size === 0) {
+          containerRect.current = null
           const wasSuppressed = suppressTools.current
           suppressTools.current = false
           if (wasSuppressed) {
@@ -312,7 +340,10 @@ export function LayoutCanvas() {
         TOOLS[activeTool]?.onGestureCancel?.()
         touchDispatchedToTool.current = false
       }
-      if (touchPoints.current.size === 0) suppressTools.current = false
+      if (touchPoints.current.size === 0) {
+        suppressTools.current = false
+        containerRect.current = null
+      }
     },
     [activeTool],
   )
@@ -328,17 +359,9 @@ export function LayoutCanvas() {
 
     const rect = containerRef.current?.getBoundingClientRect()
     if (!rect) return
-    const v = viewRef.current
-    const ppu = BASE_PIXELS_PER_UNIT * v.scale
-    const worldRaw: Point = {
-      x: (e.clientX - rect.left - v.x) / ppu,
-      y: (e.clientY - rect.top - v.y) / ppu,
-    }
-    const worldPt = settings.snapToGrid
-      ? snapToGrid(worldRaw, adaptiveGridSize(settings.gridSize, v.scale))
-      : worldRaw
+    const pos = { x: e.clientX - rect.left, y: e.clientY - rect.top }
 
-    placeFurnitureAt(defId, worldPt)
+    placeFurnitureAt(defId, snappedScreenToWorld(pos))
   }
 
   function handleWheel(e: React.WheelEvent<HTMLDivElement>) {

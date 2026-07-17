@@ -81,3 +81,23 @@ export function rotatePoint(pt: Point, center: Point, degrees: number): Point {
     y: center.y + dx * sin + dy * cos,
   }
 }
+
+/** Hit test for a rectangle (given as top-left x/y plus width/height, before
+ * rotation) that's rotated in place around its own center - unrotates the
+ * point into the rectangle's local frame, then does a plain AABB check.
+ * Shared by any entity type (furniture, reference images, ...) whose body is
+ * a rotated axis-aligned box. */
+export function pointInRotatedRect(
+  pt: Point,
+  rect: { x: number; y: number; width: number; height: number },
+  degrees: number,
+): boolean {
+  const center: Point = { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }
+  const localPt = rotatePoint(pt, center, -degrees)
+  return (
+    localPt.x >= rect.x &&
+    localPt.x <= rect.x + rect.width &&
+    localPt.y >= rect.y &&
+    localPt.y <= rect.y + rect.height
+  )
+}

@@ -15,6 +15,9 @@ export function RoomLayer({ pixelsPerUnit }: Props) {
   const units = useProjectStore((s) => s.project.settings.units)
   const dragState = useUIStore((s) => s.dragState)
   const showWallLabels = useUIStore((s) => s.showWallLabels)
+  const showLayer = useUIStore((s) => s.showLayers.rooms)
+
+  if (!showLayer) return <Layer />
 
   return (
     <Layer>

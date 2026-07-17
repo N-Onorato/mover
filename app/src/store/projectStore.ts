@@ -141,6 +141,7 @@ export const useProjectStore = create<ProjectStore>((set) => ({
           ),
           furnitureInstances: s.project.furnitureInstances.filter((f) => !idSet.has(f.id)),
           annotations: s.project.annotations.filter((a) => !idSet.has(a.id)),
+          referenceImages: s.project.referenceImages.filter((img) => !idSet.has(img.id)),
         },
         isDirty: true,
       }

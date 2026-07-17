@@ -10,6 +10,9 @@ interface Props {
 export function FurnitureLayer({ pixelsPerUnit: ppu }: Props) {
   const instances = useProjectStore((s) => s.project.furnitureInstances)
   const dragState = useUIStore((s) => s.dragState)
+  const showLayer = useUIStore((s) => s.showLayers.furniture)
+
+  if (!showLayer) return <Layer />
 
   return (
     <Layer>

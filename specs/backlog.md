@@ -594,6 +594,81 @@ Acceptance criteria:
   markers, or should show them visually distinct as non-interactive — pick
   one and document it.
 
+## Group H — Deferred from the 2026-07-12 cleanup pass
+
+Source: `/simplify` review of the mobile usability commit (2026-07-12, touch
+canvas input, tap-to-place, drawer layout). These were flagged but
+intentionally not fixed in that pass because each needs a real design
+decision or touches every tool, not just the reviewed diff.
+
+### H1. `DrawingControls` drives tools via synthetic keyboard events
+**Priority: P3**
+**Status: Deferred (2026-07-12) — fixing this means adding real methods to `ToolHandlers` and updating every drawing tool; held back from the cleanup pass as out of scope for a mechanical fix.**
+
+`DrawingControls.tsx:19-20`'s `sendKey` constructs a real `new
+KeyboardEvent('keydown', { key })` and dispatches it straight to
+`TOOLS[activeTool].onKeyDown` so its Done/Undo point/Cancel buttons (the
+touch alternative to Escape/Enter/Backspace) reuse each tool's existing
+key-handling logic. This works only because every tool's `onKeyDown`
+(`RoomTool.ts:68-84`, `InteriorWallTool.ts:102-108`, `ImageTool.ts:142-...`)
+happens to react to those exact key strings — a tool that changes its key
+bindings would silently break the touch buttons with no type error.
+
+Acceptance criteria:
+- `ToolHandlers` (`SelectTool.ts:20-40`) gains explicit optional methods for
+  the semantic actions currently reached only through fake key names (e.g.
+  `onFinish?()`, `onUndoStep?()`, `onCancel?()`).
+- Each tool's `onKeyDown` calls these same methods instead of duplicating
+  the logic inline, and `DrawingControls` calls them directly instead of
+  building a `KeyboardEvent`.
+- Existing keyboard shortcuts (Escape/Enter/Backspace) behave identically
+  after the refactor — this changes how the action is invoked, not what it
+  does.
+
+### H2. `onGestureCancel` repeats near-identical per-tool logic
+**Priority: P3**
+**Status: Deferred (2026-07-12) — each tool's `drawingState` has a different shape (room/calibration carry a `points` array, interior wall carries a single point `a`), so a shared implementation isn't a pure mechanical extraction; needs a small design decision on how to generalize "drop whatever this drawing state represents," held back from the cleanup pass for that reason.**
+
+Four tools each implement `onGestureCancel` (`SelectTool.ts:39` interface,
+implementations at `RoomTool.ts:100-108`, `InteriorWallTool.ts:118-121`,
+`ImageTool.ts:158-...`, `SelectTool.ts:716-...`) to discard whatever a stray
+pointer-down started when a second finger turns it into a pinch/pan. Three
+of the four (room, calibration, interior wall) do the same shape of thing —
+"if my drawing state is active, pop the last point or null it out" — largely
+duplicating what `onRightClick`/Escape already do per tool (compare
+`InteriorWallTool.onRightClick`, a one-line `setDrawingState(null)`, to its
+`onGestureCancel` just below it, which is nearly identical).
+
+Acceptance criteria:
+- A single shared implementation (e.g. living alongside `drawingState` in
+  `uiStore`, or a small dispatch keyed on `drawingState.kind`) handles the
+  "drop the in-progress drawing state" case for room/calibration/interior
+  wall, so adding a fifth drawing tool doesn't require remembering to add a
+  fifth near-identical `onGestureCancel`.
+- `SelectTool`'s drag/marquee cancellation (a different concern —
+  `dragState`, not `drawingState`) can stay tool-specific; this only
+  consolidates the three drawing-state cases.
+- Existing gesture-cancel behavior for each tool (verified manually: pinch
+  mid-room-draw, mid-wall-draw, mid-calibration) is unchanged.
+
+### H3. `MobileDrawer` and `SettingsPanel` duplicate the same overlay pattern
+**Priority: P3**
+**Status: Deferred (2026-07-12) — flagged as reuse duplication but neither is currently a shared abstraction; extracting one means picking a shape (props, closing behavior) that fits both call sites, not just moving code, so it was left out of the mechanical cleanup pass.**
+
+`MobileDrawer.tsx:15-16` (scrim + panel, `onClick={onClose}` on the scrim)
+and `SettingsPanel.tsx:30-31` (`styles.overlay` with `onClick={onClose}`
+wrapping a `styles.modal` that stops propagation) independently implement
+the same "full-screen scrim, click outside to close" behavior with slightly
+different structure (separate scrim element vs. click-outside-the-inner-box).
+
+Acceptance criteria:
+- One shared `Overlay`/`Modal` component (scrim + click-outside-to-close)
+  used by both `MobileDrawer` and `SettingsPanel`, parameterized for the
+  differences that matter (e.g. drawer's left/right slide-in position vs.
+  the settings modal's centered box).
+- No visual or behavioral change to either existing usage — this is a pure
+  extraction.
+
 ## Suggested build order
 
 1. **A1** unit parsing (unblocks B1's prompt replacement and D2's sqft display)

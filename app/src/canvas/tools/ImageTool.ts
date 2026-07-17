@@ -116,7 +116,7 @@ function finishCalibration(imageId: string, points: [Point, Point]) {
 }
 
 export const ImageTool: ToolHandlers = {
-  onPointerDown(worldPt: Point, _ppu: number, _modifiers) {
+  onPointerDown(worldPt: Point, _rawWorldPt: Point, _ppu: number, _modifiers) {
     const { drawingState, setDrawingState } = useUIStore.getState()
     if (!drawingState) return
     if (drawingState.kind === 'imageOrigin') {

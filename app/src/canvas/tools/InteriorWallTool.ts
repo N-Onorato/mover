@@ -68,7 +68,7 @@ function commitWall(roomId: string, a: Point, b: Point) {
 }
 
 export const InteriorWallTool: ToolHandlers = {
-  onPointerDown(worldPt: Point, ppu: number, _modifiers) {
+  onPointerDown(worldPt: Point, _rawWorldPt: Point, ppu: number, _modifiers) {
     const { drawingState, setDrawingState } = useUIStore.getState()
 
     if (!drawingState || drawingState.kind !== 'interiorWall') {
