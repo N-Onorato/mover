@@ -248,6 +248,15 @@ export function LayoutCanvas() {
 
   const handlePointerDown = useCallback(
     (e: KonvaEventObject<PointerEvent>) => {
+      // Konva's canvas isn't a native focusable element, so clicking it never
+      // blurs a focused input on its own. Without this, document.activeElement
+      // stays on a PropertiesPanel field after the user clicks the canvas, and
+      // every subsequent keydown (Delete/Backspace) keeps getting swallowed by
+      // the "don't hijack typing" guards in MenuBar/LayoutCanvas keydown handlers.
+      const active = document.activeElement
+      if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) {
+        active.blur()
+      }
       if (e.evt.pointerType === 'touch') {
         touchPoints.current.set(e.evt.pointerId, getContainerPoint(e))
         if (touchPoints.current.size === 2) {
