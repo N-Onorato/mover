@@ -536,8 +536,8 @@ export function LayoutCanvas() {
         <ReferenceImageLayer pixelsPerUnit={pixelsPerUnit} />
         <RoomLayer pixelsPerUnit={pixelsPerUnit} />
         <InteriorWallLayer pixelsPerUnit={pixelsPerUnit} units={settings.units} />
-        <HighlightLayer pixelsPerUnit={pixelsPerUnit} />
         <FurnitureLayer pixelsPerUnit={pixelsPerUnit} />
+        <HighlightLayer pixelsPerUnit={pixelsPerUnit} />
         <AnnotationLayer />
         <SelectionLayer pixelsPerUnit={pixelsPerUnit} units={settings.units} />
       </Stage>
