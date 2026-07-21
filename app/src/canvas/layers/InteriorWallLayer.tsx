@@ -38,9 +38,9 @@ export function InteriorWallLayer({ pixelsPerUnit: ppu, units }: Props) {
         if (dragState?.kind === 'interiorWallEndpoint' && dragState.wallId === wall.id) {
           a = dragState.currentA
           b = dragState.currentB
-        } else if (dragState?.kind === 'multi' && dragState.currentWallById[wall.id]) {
-          a = dragState.currentWallById[wall.id].a
-          b = dragState.currentWallById[wall.id].b
+        } else if (dragState?.kind === 'multi' && dragState.wallIds.includes(wall.id)) {
+          a = { x: wall.a.x + dragState.dx, y: wall.a.y + dragState.dy }
+          b = { x: wall.b.x + dragState.dx, y: wall.b.y + dragState.dy }
         }
 
         const bb = polygonBoundingBox(room.points)

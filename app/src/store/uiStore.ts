@@ -115,18 +115,20 @@ export interface FurnitureRotateDragState {
  * to a selected room ride along automatically even when not themselves
  * selected. Shape/rotation edits (vertex, wall-edge, furniture resize/rotate,
  * interior-wall endpoint) aren't rigid translations and keep their own
- * dedicated drag states below instead of folding into this one. */
+ * dedicated drag states below instead of folding into this one.
+ *
+ * F2: only the translation offset is stored, not a materialized copy of every
+ * dragged entity's points/position - nothing in projectStore is mutated until
+ * commit, so `dx`/`dy` applied to the still-current project state is always
+ * equivalent to a snapshot-plus-delta, without allocating new point arrays on
+ * every pointer-move. */
 export interface MultiDragState {
   kind: 'multi'
   roomIds: string[]
-  originalRoomPointsById: Record<string, Point[]>
-  currentRoomPointsById: Record<string, Point[]>
   furnitureIds: string[]
-  originalFurniturePosById: Record<string, Point>
-  currentFurniturePosById: Record<string, Point>
   wallIds: string[]
-  originalWallById: Record<string, { a: Point; b: Point }>
-  currentWallById: Record<string, { a: Point; b: Point }>
+  dx: number
+  dy: number
 }
 
 export type DragState =
@@ -312,3 +314,40 @@ export const useUIStore = create<UIStore>((set) => ({
     })),
   setView: (view) => set({ view }),
 }))
+
+/** H2: shared "drop whatever this drawing state represents" behavior for a
+ * gesture-cancel (a stray pointer-down turning into a pinch/pan mid-draw),
+ * used by every ToolHandlers.onGestureCancel that operates on drawingState
+ * (room, calibration, interior wall) instead of each tool duplicating its own
+ * near-identical version. Point-array kinds (room, calibration) pop their
+ * last committed point; the whole drawing state is dropped once popping
+ * would leave the kind below its minimum meaningful point count - which
+ * differs per kind: a room can't meaningfully exist with 0 points (its
+ * drawingState is only ever created with the first point already in it), so
+ * it's abandoned entirely at 1, whereas calibration's drawingState is
+ * created *before* its first point is placed, so 0 points is already a
+ * normal "waiting for the first click" state to pop back down to. Interior
+ * wall carries a single anchor point (not an array), so there's nothing
+ * partial to fall back to - any gesture-cancel just drops it. */
+export function cancelDrawingGesture(kind: 'room' | 'calibration' | 'interiorWall') {
+  const { drawingState, setDrawingState } = useUIStore.getState()
+  if (!drawingState || drawingState.kind !== kind) return
+
+  if (drawingState.kind === 'room') {
+    if (drawingState.points.length <= 1) {
+      setDrawingState(null)
+    } else {
+      setDrawingState({ ...drawingState, points: drawingState.points.slice(0, -1) })
+    }
+    return
+  }
+
+  if (drawingState.kind === 'calibration') {
+    if (drawingState.points.length > 0) {
+      setDrawingState({ ...drawingState, points: drawingState.points.slice(0, -1) })
+    }
+    return
+  }
+
+  setDrawingState(null)
+}

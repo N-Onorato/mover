@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { Overlay } from './Overlay'
 import styles from './MobileDrawer.module.css'
 
 interface Props {
@@ -12,11 +13,12 @@ interface Props {
  * phone. Tapping the scrim closes it. */
 export function MobileDrawer({ side, onClose, children }: Props) {
   return (
-    <div className={styles.overlay}>
-      <div className={styles.scrim} onClick={onClose} />
-      <div className={`${styles.drawer} ${side === 'left' ? styles.left : styles.right}`}>
-        {children}
-      </div>
-    </div>
+    <Overlay
+      onClose={onClose}
+      className={styles.overlay}
+      contentClassName={`${styles.drawer} ${side === 'left' ? styles.left : styles.right}`}
+    >
+      {children}
+    </Overlay>
   )
 }

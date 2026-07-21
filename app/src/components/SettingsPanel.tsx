@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useProjectStore } from '../store/projectStore'
 import { formatLength, parseLength } from '../utils/units'
 import { UndoableField } from './PropertiesPanel'
+import { Overlay } from './Overlay'
 import styles from './SettingsPanel.module.css'
 
 interface SettingsPanelProps {
@@ -27,32 +28,30 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
   }
 
   return (
-    <div className={styles.overlay} onClick={onClose}>
-      <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
-        <div className={styles.header}>
-          <span>Project Settings</span>
-          <button className={styles.closeButton} onClick={onClose} aria-label="Close">
-            ×
-          </button>
-        </div>
-        <div className={styles.body}>
-          <div className={styles.section}>
-            <div className={styles.sectionTitle}>Walls</div>
-            <UndoableField
-              label="Default wall thickness (new rooms)"
-              type="text"
-              value={defaultWallThickness.toFixed(2)}
-              onCommit={commitWallThickness}
-            />
-            <div className={styles.hint}>{formatLength(defaultWallThickness, units)}</div>
-            {error && <div className={styles.error}>{error}</div>}
-            <div className={styles.hint}>
-              Applies to rooms drawn after this change. Existing rooms keep their current wall
-              thickness and can be overridden individually in the Properties panel.
-            </div>
+    <Overlay onClose={onClose} className={styles.overlay} contentClassName={styles.modal}>
+      <div className={styles.header}>
+        <span>Project Settings</span>
+        <button className={styles.closeButton} onClick={onClose} aria-label="Close">
+          ×
+        </button>
+      </div>
+      <div className={styles.body}>
+        <div className={styles.section}>
+          <div className={styles.sectionTitle}>Walls</div>
+          <UndoableField
+            label="Default wall thickness (new rooms)"
+            type="text"
+            value={defaultWallThickness.toFixed(2)}
+            onCommit={commitWallThickness}
+          />
+          <div className={styles.hint}>{formatLength(defaultWallThickness, units)}</div>
+          {error && <div className={styles.error}>{error}</div>}
+          <div className={styles.hint}>
+            Applies to rooms drawn after this change. Existing rooms keep their current wall
+            thickness and can be overridden individually in the Properties panel.
           </div>
         </div>
       </div>
-    </div>
+    </Overlay>
   )
 }

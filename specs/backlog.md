@@ -333,7 +333,7 @@ decision or touches every tool, not just the reviewed diff.
 
 ### F1. Per-room re-render/recompute cost during room drag
 **Priority: P3**
-**Status: Deferred (2026-07-11) — intentionally held back from the G1-G6/F5 parallel push: F2's suggested fix (storing dx/dy instead of materialized points in `dragState`) would restructure `RoomDragState`, the same shape F3 just finished stabilizing by moving drag/interaction state into `uiStore`. Safer as its own follow-up pass once that settles, rather than compounding two store-shape changes at once.**
+**Status: Done (2026-07-21) — reverified against the current tree (F3's uiStore refactor and #27's multi-item drag had both landed since this was filed; the O(rooms) recompute during a drag was still present, now via `dragState.kind === 'multi'` too). `RoomLayer` split into a `RoomShape` child per room; each subscribes only to its own room's slice of `dragState` (wall/vertex `currentPoints`, or multi's `dx`/`dy` when its id is in `roomIds`), so unrelated rooms see the same primitive on every pointer-move and never re-render.**
 
 `RoomLayer.tsx` subscribes the whole layer to `dragState`
 (`const dragState = useUIStore((s) => s.dragState)`), which is a new object
@@ -358,7 +358,7 @@ Acceptance criteria:
 
 ### F2. Room-drag pointer-move materializes full point arrays every frame
 **Priority: P3**
-**Status: Deferred (2026-07-11) — see F1; same reasoning, same follow-up.**
+**Status: Done (2026-07-21) — fixed alongside F1. `MultiDragState` now stores only `dx`/`dy` (the `original*`/`current*` point-and-position maps are gone); `onPointerMove` is an O(1) `setDragState({...dragState, dx, dy})` regardless of selection size, and `onPointerUp` derives the final translated points/positions once, from the still-current (untouched-until-commit) project state. RoomLayer/FurnitureLayer/InteriorWallLayer/HighlightLayer preview layers were updated to derive live positions from `dx`/`dy` the same way.**
 
 Related to F1. `SelectTool.ts`'s room-drag `onPointerMove` branch
 (`nextById[id] = orig.map((p) => ({ x: p.x + dx, y: p.y + dy }))`) rebuilds a
@@ -603,7 +603,7 @@ decision or touches every tool, not just the reviewed diff.
 
 ### H1. `DrawingControls` drives tools via synthetic keyboard events
 **Priority: P3**
-**Status: Deferred (2026-07-12) — fixing this means adding real methods to `ToolHandlers` and updating every drawing tool; held back from the cleanup pass as out of scope for a mechanical fix.**
+**Status: Done (2026-07-21) — reverified valid against the current tree. `ToolHandlers` gained `onFinish?()`/`onUndoStep?()`/`onCancel?()`; Room/InteriorWall/Image tools now each expose these (backed by the same named functions their `onKeyDown` calls), and `DrawingControls` calls `tool.onFinish?()` etc. directly instead of building a `new KeyboardEvent(...)`.**
 
 `DrawingControls.tsx:19-20`'s `sendKey` constructs a real `new
 KeyboardEvent('keydown', { key })` and dispatches it straight to
@@ -627,7 +627,7 @@ Acceptance criteria:
 
 ### H2. `onGestureCancel` repeats near-identical per-tool logic
 **Priority: P3**
-**Status: Deferred (2026-07-12) — each tool's `drawingState` has a different shape (room/calibration carry a `points` array, interior wall carries a single point `a`), so a shared implementation isn't a pure mechanical extraction; needs a small design decision on how to generalize "drop whatever this drawing state represents," held back from the cleanup pass for that reason.**
+**Status: Done (2026-07-21) — reverified valid. Added `cancelDrawingGesture(kind)` alongside `drawingState` in `uiStore.ts`, dispatching per kind: room and calibration each pop their last point (clearing entirely only once popping would go below what that kind can meaningfully sit at - 1 point for room, 0 for calibration, since calibration's drawingState already exists before its first click); interior wall just clears, since its single anchor point has nothing partial to fall back to. Room/InteriorWall/Image's `onGestureCancel` now call this instead of each duplicating the pop-or-clear logic.**
 
 Four tools each implement `onGestureCancel` (`SelectTool.ts:39` interface,
 implementations at `RoomTool.ts:100-108`, `InteriorWallTool.ts:118-121`,
@@ -653,7 +653,7 @@ Acceptance criteria:
 
 ### H3. `MobileDrawer` and `SettingsPanel` duplicate the same overlay pattern
 **Priority: P3**
-**Status: Deferred (2026-07-12) — flagged as reuse duplication but neither is currently a shared abstraction; extracting one means picking a shape (props, closing behavior) that fits both call sites, not just moving code, so it was left out of the mechanical cleanup pass.**
+**Status: Done (2026-07-21) — reverified valid. Added a shared `components/Overlay.tsx` (scrim div with `onClick={onClose}`, wrapping a content div with `onClick={(e) => e.stopPropagation()}`) parameterized by `className`/`contentClassName` for the two call sites' visual differences (drawer slide-in position vs. centered modal box). Both `MobileDrawer` and `SettingsPanel` now render through it; no visual or behavioral change (verified in-browser: both open and close on scrim click as before).**
 
 `MobileDrawer.tsx:15-16` (scrim + panel, `onClick={onClose}` on the scrim)
 and `SettingsPanel.tsx:30-31` (`styles.overlay` with `onClick={onClose}`

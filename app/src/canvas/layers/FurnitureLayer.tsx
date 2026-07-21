@@ -31,10 +31,9 @@ export function FurnitureLayer({ pixelsPerUnit: ppu }: Props) {
           depth = dragState.currentDepth
         } else if (dragState?.kind === 'furnitureRotate' && dragState.id === f.id) {
           rotation = dragState.currentRotation
-        } else if (dragState?.kind === 'multi' && dragState.currentFurniturePosById[f.id]) {
-          const pos = dragState.currentFurniturePosById[f.id]
-          x = pos.x
-          y = pos.y
+        } else if (dragState?.kind === 'multi' && dragState.furnitureIds.includes(f.id)) {
+          x = f.x + dragState.dx
+          y = f.y + dragState.dy
         }
 
         const cx = (x + width / 2) * ppu
