@@ -1,6 +1,6 @@
 import type { ToolHandlers } from './SelectTool'
 import type { Point } from '../../types/project'
-import { useUIStore } from '../../store/uiStore'
+import { useUIStore, cancelDrawingGesture } from '../../store/uiStore'
 import { useProjectStore } from '../../store/projectStore'
 import { useHistoryStore } from '../../store/historyStore'
 import { distance } from '../../utils/geometry'
@@ -23,6 +23,27 @@ function commitRoom(points: Point[]) {
     locked: false,
     visible: true,
   })
+  useUIStore.getState().setDrawingState(null)
+}
+
+// H1: the semantic actions behind Escape/Enter/Backspace, as their own named
+// functions so onKeyDown and ToolHandlers.onFinish/onUndoStep/onCancel share
+// one implementation instead of the key handler being the only path to them.
+function finishRoom() {
+  const { drawingState } = useUIStore.getState()
+  if (drawingState?.kind === 'room' && drawingState.points.length >= 3) {
+    commitRoom(drawingState.points)
+  }
+}
+
+function undoRoomPoint() {
+  const { drawingState, setDrawingState } = useUIStore.getState()
+  if (drawingState?.kind === 'room' && drawingState.points.length > 1) {
+    setDrawingState({ ...drawingState, points: drawingState.points.slice(0, -1) })
+  }
+}
+
+function cancelRoom() {
   useUIStore.getState().setDrawingState(null)
 }
 
@@ -66,22 +87,21 @@ export const RoomTool: ToolHandlers = {
   onPointerUp(_worldPt: Point, _ppu: number, _modifiers) {},
 
   onKeyDown(e: KeyboardEvent) {
-    const { drawingState, setDrawingState } = useUIStore.getState()
+    const drawingState = useUIStore.getState().drawingState
     if (!drawingState) return
-
     if (e.key === 'Escape') {
-      setDrawingState(null)
-      return
-    }
-    if (e.key === 'Enter' && drawingState.kind === 'room' && drawingState.points.length >= 3) {
-      commitRoom(drawingState.points)
-      return
-    }
-    if (e.key === 'Backspace' && drawingState.kind === 'room' && drawingState.points.length > 1) {
+      cancelRoom()
+    } else if (e.key === 'Enter') {
+      finishRoom()
+    } else if (e.key === 'Backspace' && drawingState.kind === 'room' && drawingState.points.length > 1) {
       e.preventDefault()
-      setDrawingState({ ...drawingState, points: drawingState.points.slice(0, -1) })
+      undoRoomPoint()
     }
   },
+
+  onFinish: finishRoom,
+  onUndoStep: undoRoomPoint,
+  onCancel: cancelRoom,
 
   onRightClick() {
     const { drawingState, setDrawingState } = useUIStore.getState()
@@ -96,14 +116,8 @@ export const RoomTool: ToolHandlers = {
 
   // A pinch started while drawing: the first finger's pointer-down added a
   // stray point - pop it (or drop the drawing entirely if that stray point
-  // was the first one).
+  // was the first one). See H2/cancelDrawingGesture for the shared logic.
   onGestureCancel() {
-    const { drawingState, setDrawingState } = useUIStore.getState()
-    if (!drawingState || drawingState.kind !== 'room') return
-    if (drawingState.points.length <= 1) {
-      setDrawingState(null)
-    } else {
-      setDrawingState({ ...drawingState, points: drawingState.points.slice(0, -1) })
-    }
+    cancelDrawingGesture('room')
   },
 }

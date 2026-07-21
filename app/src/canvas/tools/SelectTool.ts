@@ -42,6 +42,16 @@ export interface ToolHandlers {
    * browser. The tool should discard whatever that stray pointer-down
    * started, without committing anything. */
   onGestureCancel?(): void
+  /** H1: semantic actions a tool's onKeyDown reacts to (Escape/Enter/
+   * Backspace), exposed as their own methods so DrawingControls' touch
+   * buttons can call them directly instead of constructing a synthetic
+   * KeyboardEvent and hoping the active tool's key bindings never change.
+   * Each tool's onKeyDown should call these same methods rather than
+   * duplicating their logic inline. Present only on tools with an in-progress
+   * drawingState to finish/step-back/cancel. */
+  onFinish?(): void
+  onUndoStep?(): void
+  onCancel?(): void
 }
 
 // Hit-test thresholds are wider on touch devices - a fingertip can't land
@@ -87,7 +97,7 @@ export function furnitureRotateHandle(f: FurnitureInstance, ppu: number): Point 
 let lastClickMs = 0
 let lastClickEdge: { roomId: string; edgeIndex: number } | null = null
 
-/** Builds a MultiDragState snapshotting every room/furniture/interior-wall in
+/** Builds a MultiDragState covering every room/furniture/interior-wall in
  * `selectedIds` (plus any interior wall anchored to a selected room),
  * filtered the same way each type's own hit test already filters
  * (invisible/locked entities, or those under a locked parent room, never
@@ -100,51 +110,22 @@ function buildMultiDragState(selectedIds: string[]): MultiDragState {
   const selectedSet = new Set(selectedIds)
   const roomsById = new Map(rooms.map((r) => [r.id, r]))
 
-  const roomIds: string[] = []
-  const originalRoomPointsById: Record<string, Point[]> = {}
-  const currentRoomPointsById: Record<string, Point[]> = {}
-  for (const r of rooms) {
-    if (!selectedSet.has(r.id) || !r.visible || r.locked) continue
-    roomIds.push(r.id)
-    originalRoomPointsById[r.id] = r.points
-    currentRoomPointsById[r.id] = r.points
-  }
+  const roomIds = rooms.filter((r) => selectedSet.has(r.id) && r.visible && !r.locked).map((r) => r.id)
   const roomIdSet = new Set(roomIds)
 
-  const furnitureIds: string[] = []
-  const originalFurniturePosById: Record<string, Point> = {}
-  const currentFurniturePosById: Record<string, Point> = {}
-  for (const f of furnitureInstances) {
-    if (!selectedSet.has(f.id) || !f.visible || f.locked) continue
-    furnitureIds.push(f.id)
-    originalFurniturePosById[f.id] = { x: f.x, y: f.y }
-    currentFurniturePosById[f.id] = { x: f.x, y: f.y }
-  }
+  const furnitureIds = furnitureInstances
+    .filter((f) => selectedSet.has(f.id) && f.visible && !f.locked)
+    .map((f) => f.id)
 
-  const wallIds: string[] = []
-  const originalWallById: Record<string, { a: Point; b: Point }> = {}
-  const currentWallById: Record<string, { a: Point; b: Point }> = {}
-  for (const w of interiorWalls) {
-    const parentRoom = roomsById.get(w.roomId)
-    if (!parentRoom || !parentRoom.visible || parentRoom.locked) continue
-    if (!roomIdSet.has(w.roomId) && !selectedSet.has(w.id)) continue
-    wallIds.push(w.id)
-    originalWallById[w.id] = { a: w.a, b: w.b }
-    currentWallById[w.id] = { a: w.a, b: w.b }
-  }
+  const wallIds = interiorWalls
+    .filter((w) => {
+      const parentRoom = roomsById.get(w.roomId)
+      if (!parentRoom || !parentRoom.visible || parentRoom.locked) return false
+      return roomIdSet.has(w.roomId) || selectedSet.has(w.id)
+    })
+    .map((w) => w.id)
 
-  return {
-    kind: 'multi',
-    roomIds,
-    originalRoomPointsById,
-    currentRoomPointsById,
-    furnitureIds,
-    originalFurniturePosById,
-    currentFurniturePosById,
-    wallIds,
-    originalWallById,
-    currentWallById,
-  }
+  return { kind: 'multi', roomIds, furnitureIds, wallIds, dx: 0, dy: 0 }
 }
 
 /** Shared onPointerDown tail for all three body hit tests (furniture/wall/
@@ -439,34 +420,10 @@ export const SelectTool: ToolHandlers = {
     }
 
     if (mode === 'multi' && dragState?.kind === 'multi' && dragAnchorWorld) {
-      const dx = worldPt.x - dragAnchorWorld.x
-      const dy = worldPt.y - dragAnchorWorld.y
-
-      const currentRoomPointsById: Record<string, Point[]> = {}
-      for (const id of dragState.roomIds) {
-        const orig = dragState.originalRoomPointsById[id]
-        if (!orig) continue
-        currentRoomPointsById[id] = orig.map((p) => ({ x: p.x + dx, y: p.y + dy }))
-      }
-
-      const currentFurniturePosById: Record<string, Point> = {}
-      for (const id of dragState.furnitureIds) {
-        const orig = dragState.originalFurniturePosById[id]
-        if (!orig) continue
-        currentFurniturePosById[id] = { x: orig.x + dx, y: orig.y + dy }
-      }
-
-      const currentWallById: Record<string, { a: Point; b: Point }> = {}
-      for (const id of dragState.wallIds) {
-        const orig = dragState.originalWallById[id]
-        if (!orig) continue
-        currentWallById[id] = {
-          a: { x: orig.a.x + dx, y: orig.a.y + dy },
-          b: { x: orig.b.x + dx, y: orig.b.y + dy },
-        }
-      }
-
-      setDragState({ ...dragState, currentRoomPointsById, currentFurniturePosById, currentWallById })
+      // F2: just the translation offset - no per-frame array/object allocation
+      // for every dragged room/furniture/wall. Preview layers derive live
+      // positions from this offset plus the (unmutated) project state.
+      setDragState({ ...dragState, dx: worldPt.x - dragAnchorWorld.x, dy: worldPt.y - dragAnchorWorld.y })
       return
     }
 
@@ -649,41 +606,39 @@ export const SelectTool: ToolHandlers = {
     }
 
     if (mode === 'multi' && dragState?.kind === 'multi') {
-      const { project } = useProjectStore.getState()
-      const roomsById = new Map(project.rooms.map((r) => [r.id, r]))
-      const furnitureById = new Map(project.furnitureInstances.map((f) => [f.id, f]))
-      const wallsById = new Map(project.interiorWalls.map((w) => [w.id, w]))
-
-      const moved =
-        dragState.roomIds.some((id) => {
-          const room = roomsById.get(id)
-          const next = dragState.currentRoomPointsById[id]
-          return !!room && !!next && !pointsEqual(room.points, next)
-        }) ||
-        dragState.furnitureIds.some((id) => {
-          const f = furnitureById.get(id)
-          const next = dragState.currentFurniturePosById[id]
-          return !!f && !!next && (f.x !== next.x || f.y !== next.y)
-        }) ||
-        dragState.wallIds.some((id) => {
-          const w = wallsById.get(id)
-          const next = dragState.currentWallById[id]
-          return !!w && !!next && !pointsEqual([w.a, w.b], [next.a, next.b])
-        })
-
+      // F2: nothing in projectStore was touched during the drag, so the
+      // still-current room/furniture/wall state *is* the pre-drag original -
+      // commit is just that state translated by the final (dx, dy) once,
+      // rather than replaying a per-frame materialized copy.
+      const { dx, dy } = dragState
+      const moved = dx !== 0 || dy !== 0
       if (moved) {
+        const { project } = useProjectStore.getState()
         useHistoryStore.getState().pushSnapshot(project)
+        const roomsById = new Map(project.rooms.map((r) => [r.id, r]))
+        const furnitureById = new Map(project.furnitureInstances.map((f) => [f.id, f]))
+        const wallsById = new Map(project.interiorWalls.map((w) => [w.id, w]))
+
         for (const id of dragState.roomIds) {
-          const nextPoints = dragState.currentRoomPointsById[id]
-          if (nextPoints) useProjectStore.getState().updateRoom(id, { points: nextPoints })
+          const room = roomsById.get(id)
+          if (room) {
+            useProjectStore
+              .getState()
+              .updateRoom(id, { points: room.points.map((p) => ({ x: p.x + dx, y: p.y + dy })) })
+          }
         }
         for (const id of dragState.furnitureIds) {
-          const next = dragState.currentFurniturePosById[id]
-          if (next) useProjectStore.getState().updateFurniture(id, { x: next.x, y: next.y })
+          const f = furnitureById.get(id)
+          if (f) useProjectStore.getState().updateFurniture(id, { x: f.x + dx, y: f.y + dy })
         }
         for (const id of dragState.wallIds) {
-          const next = dragState.currentWallById[id]
-          if (next) useProjectStore.getState().updateInteriorWall(id, { a: next.a, b: next.b })
+          const w = wallsById.get(id)
+          if (w) {
+            useProjectStore.getState().updateInteriorWall(id, {
+              a: { x: w.a.x + dx, y: w.a.y + dy },
+              b: { x: w.b.x + dx, y: w.b.y + dy },
+            })
+          }
         }
       }
       setDragState(null)

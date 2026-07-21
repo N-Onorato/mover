@@ -1,6 +1,6 @@
 import type { ToolHandlers } from './SelectTool'
 import type { Point, Room } from '../../types/project'
-import { useUIStore } from '../../store/uiStore'
+import { useUIStore, cancelDrawingGesture } from '../../store/uiStore'
 import { useProjectStore } from '../../store/projectStore'
 import { useHistoryStore } from '../../store/historyStore'
 import { distance, closestPointOnSegment, pointInPolygon } from '../../utils/geometry'
@@ -67,6 +67,11 @@ function commitWall(roomId: string, a: Point, b: Point) {
   useUIStore.getState().setDrawingState(null)
 }
 
+// H1: named so onKeyDown and ToolHandlers.onCancel share one implementation.
+function cancelInteriorWall() {
+  useUIStore.getState().setDrawingState(null)
+}
+
 export const InteriorWallTool: ToolHandlers = {
   onPointerDown(worldPt: Point, _rawWorldPt: Point, ppu: number, _modifiers) {
     const { drawingState, setDrawingState } = useUIStore.getState()
@@ -100,23 +105,22 @@ export const InteriorWallTool: ToolHandlers = {
   onPointerUp(_worldPt: Point, _ppu: number, _modifiers) {},
 
   onKeyDown(e: KeyboardEvent) {
-    const { drawingState, setDrawingState } = useUIStore.getState()
+    const drawingState = useUIStore.getState().drawingState
     if (!drawingState || drawingState.kind !== 'interiorWall') return
-    if (e.key === 'Escape') {
-      setDrawingState(null)
-    }
+    if (e.key === 'Escape') cancelInteriorWall()
   },
 
+  onCancel: cancelInteriorWall,
+
   onRightClick() {
-    useUIStore.getState().setDrawingState(null)
+    cancelInteriorWall()
   },
 
   // A pinch started right as the wall's first point was placed: drop the
   // in-progress wall. (If the stray pointer-down was the *second* click it
   // already committed the wall - drawingState is null by then and this is a
-  // no-op; the committed wall stays undoable.)
+  // no-op; the committed wall stays undoable.) See H2/cancelDrawingGesture.
   onGestureCancel() {
-    const { drawingState, setDrawingState } = useUIStore.getState()
-    if (drawingState?.kind === 'interiorWall') setDrawingState(null)
+    cancelDrawingGesture('interiorWall')
   },
 }

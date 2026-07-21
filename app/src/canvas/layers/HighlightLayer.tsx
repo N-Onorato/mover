@@ -44,12 +44,16 @@ export function HighlightLayer({ pixelsPerUnit: ppu }: Props) {
   // Substitute live drag-preview values while a resize/move/rotate is in
   // progress, mirroring the room-drag preview pattern above.
   let selectedFurniture: FurnitureInstance | undefined = selectedFurnitureBase
-  const singleFurnitureMultiPos =
-    selectedFurnitureBase && dragState?.kind === 'multi'
-      ? dragState.currentFurniturePosById[selectedFurnitureBase.id]
-      : undefined
-  if (selectedFurnitureBase && singleFurnitureMultiPos) {
-    selectedFurniture = { ...selectedFurnitureBase, x: singleFurnitureMultiPos.x, y: singleFurnitureMultiPos.y }
+  if (
+    selectedFurnitureBase &&
+    dragState?.kind === 'multi' &&
+    dragState.furnitureIds.includes(selectedFurnitureBase.id)
+  ) {
+    selectedFurniture = {
+      ...selectedFurnitureBase,
+      x: selectedFurnitureBase.x + dragState.dx,
+      y: selectedFurnitureBase.y + dragState.dy,
+    }
   } else if (
     selectedFurnitureBase &&
     dragState?.kind === 'furnitureResize' &&
@@ -79,20 +83,31 @@ export function HighlightLayer({ pixelsPerUnit: ppu }: Props) {
     const outlines: { points: number[]; closed: boolean }[] = []
     for (const r of rooms) {
       if (idSet.has(r.id)) {
-        const points = multiDrag?.currentRoomPointsById[r.id] ?? r.points
+        const points =
+          multiDrag && multiDrag.roomIds.includes(r.id)
+            ? r.points.map((p) => ({ x: p.x + multiDrag.dx, y: p.y + multiDrag.dy }))
+            : r.points
         outlines.push({ points: points.flatMap((p) => [p.x * ppu, p.y * ppu]), closed: true })
       }
     }
     for (const f of furnitureInstances) {
       if (idSet.has(f.id) && !f.locked) {
-        const pos = multiDrag?.currentFurniturePosById[f.id]
-        const withPos = pos ? { ...f, x: pos.x, y: pos.y } : f
+        const withPos =
+          multiDrag && multiDrag.furnitureIds.includes(f.id)
+            ? { ...f, x: f.x + multiDrag.dx, y: f.y + multiDrag.dy }
+            : f
         outlines.push({ points: furnitureCorners(withPos).flatMap((p) => [p.x * ppu, p.y * ppu]), closed: true })
       }
     }
     for (const w of interiorWalls) {
       if (idSet.has(w.id)) {
-        const seg = multiDrag?.currentWallById[w.id] ?? w
+        const seg =
+          multiDrag && multiDrag.wallIds.includes(w.id)
+            ? {
+                a: { x: w.a.x + multiDrag.dx, y: w.a.y + multiDrag.dy },
+                b: { x: w.b.x + multiDrag.dx, y: w.b.y + multiDrag.dy },
+              }
+            : w
         outlines.push({ points: [seg.a.x * ppu, seg.a.y * ppu, seg.b.x * ppu, seg.b.y * ppu], closed: false })
       }
     }

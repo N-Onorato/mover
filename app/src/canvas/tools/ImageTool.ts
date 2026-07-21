@@ -1,6 +1,6 @@
 import type { ToolHandlers } from './SelectTool'
 import type { Point } from '../../types/project'
-import { useUIStore } from '../../store/uiStore'
+import { useUIStore, cancelDrawingGesture } from '../../store/uiStore'
 import { useProjectStore } from '../../store/projectStore'
 import { useHistoryStore } from '../../store/historyStore'
 import { distance } from '../../utils/geometry'
@@ -115,6 +115,14 @@ function finishCalibration(imageId: string, points: [Point, Point]) {
   cancelCalibration()
 }
 
+// H1: named so onKeyDown, onRightClick, and ToolHandlers.onCancel share one
+// implementation instead of each reimplementing the same kind dispatch.
+function cancelImageFlow() {
+  const kind = useUIStore.getState().drawingState?.kind
+  if (kind === 'imageOrigin') cancelImageOrigin()
+  else if (kind === 'calibration') cancelCalibration()
+}
+
 export const ImageTool: ToolHandlers = {
   onPointerDown(worldPt: Point, _rawWorldPt: Point, _ppu: number, _modifiers) {
     const { drawingState, setDrawingState } = useUIStore.getState()
@@ -140,26 +148,17 @@ export const ImageTool: ToolHandlers = {
   },
   onPointerUp(_worldPt, _ppu, _modifiers) {},
   onKeyDown(e: KeyboardEvent) {
-    if (e.key !== 'Escape') return
-    const kind = useUIStore.getState().drawingState?.kind
-    if (kind === 'imageOrigin') cancelImageOrigin()
-    else if (kind === 'calibration') cancelCalibration()
+    if (e.key === 'Escape') cancelImageFlow()
   },
-  onRightClick() {
-    const kind = useUIStore.getState().drawingState?.kind
-    if (kind === 'imageOrigin') cancelImageOrigin()
-    else if (kind === 'calibration') cancelCalibration()
-  },
+  onRightClick: cancelImageFlow,
+  onCancel: cancelImageFlow,
   // A pinch started mid-calibration: the first finger added a stray
   // calibration point - pop it so the user can zoom in for precision and
   // re-pick. (imageOrigin commits on pointer-down and hands off to
   // calibration with zero points, so there's nothing to pop there; the
-  // placed origin stays undoable.)
+  // placed origin stays undoable.) See H2/cancelDrawingGesture.
   onGestureCancel() {
-    const { drawingState, setDrawingState } = useUIStore.getState()
-    if (drawingState?.kind === 'calibration' && drawingState.points.length > 0) {
-      setDrawingState({ ...drawingState, points: drawingState.points.slice(0, -1) })
-    }
+    cancelDrawingGesture('calibration')
   },
   // B1/F4: calibration and origin placement both need raw (unsnapped)
   // coordinates — calibration's endpoints must land on the reference photo's
