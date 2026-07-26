@@ -70,6 +70,14 @@ export function rectPoints(x: number, y: number, w: number, h: number): Point[] 
   ]
 }
 
+/** Scales a point away from (or toward) a fixed anchor by `s`. The anchor is
+ * the one point a uniform scale leaves where it is - see ImageTool's
+ * calibrationPatch, which anchors on a feature the user deliberately clicked
+ * so recalibrating doesn't drag the photo off what it was aligned to. */
+export function scalePointAbout(pt: Point, anchor: Point, s: number): Point {
+  return { x: anchor.x + s * (pt.x - anchor.x), y: anchor.y + s * (pt.y - anchor.y) }
+}
+
 export function rotatePoint(pt: Point, center: Point, degrees: number): Point {
   const rad = degrees * (Math.PI / 180)
   const cos = Math.cos(rad)

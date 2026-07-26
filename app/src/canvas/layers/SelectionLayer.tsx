@@ -1,5 +1,5 @@
 import { Layer, Line, Circle, Text, Rect } from 'react-konva'
-import { useUIStore } from '../../store/uiStore'
+import { useUIStore, type DrawingState } from '../../store/uiStore'
 import { useProjectStore } from '../../store/projectStore'
 import { distance } from '../../utils/geometry'
 import { formatLength } from '../../utils/units'
@@ -119,6 +119,14 @@ function InteriorWallPreviewContents({ pixelsPerUnit, units }: Props) {
   )
 }
 
+/** The preview contents for each non-'room' drawing kind. Adding a kind means
+ * one entry here rather than another copy of the layer wrapper below. */
+const PREVIEW_CONTENTS: Partial<Record<DrawingState['kind'], (props: Props) => React.ReactNode>> = {
+  calibration: CalibrationPreviewContents,
+  imageOrigin: ImageOriginPreviewContents,
+  interiorWall: InteriorWallPreviewContents,
+}
+
 export function SelectionLayer({ pixelsPerUnit, units }: Props) {
   const drawingState = useUIStore((s) => s.drawingState)
   const marquee = useUIStore((s) => s.marquee)
@@ -141,28 +149,16 @@ export function SelectionLayer({ pixelsPerUnit, units }: Props) {
     />
   ) : null
 
-  if (drawingState?.kind === 'calibration') {
+  // Every drawing kind except 'room' previews as a self-contained contents
+  // component inside an identical layer wrapper, so they're dispatched from a
+  // table rather than one copy-pasted branch each. 'room' is the exception -
+  // its preview is the bulk of this component and reads the same drawingState
+  // inline below.
+  const PreviewContents = drawingState ? PREVIEW_CONTENTS[drawingState.kind] : undefined
+  if (PreviewContents) {
     return (
       <Layer listening={false}>
-        <CalibrationPreviewContents pixelsPerUnit={pixelsPerUnit} units={units} />
-        {marqueeRect}
-      </Layer>
-    )
-  }
-
-  if (drawingState?.kind === 'imageOrigin') {
-    return (
-      <Layer listening={false}>
-        <ImageOriginPreviewContents pixelsPerUnit={pixelsPerUnit} units={units} />
-        {marqueeRect}
-      </Layer>
-    )
-  }
-
-  if (drawingState?.kind === 'interiorWall') {
-    return (
-      <Layer listening={false}>
-        <InteriorWallPreviewContents pixelsPerUnit={pixelsPerUnit} units={units} />
+        <PreviewContents pixelsPerUnit={pixelsPerUnit} units={units} />
         {marqueeRect}
       </Layer>
     )

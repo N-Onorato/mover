@@ -17,10 +17,14 @@ import styles from './FlowIndicator.module.css'
  * tools are single-click and don't need narrating.
  */
 export function FlowIndicator() {
-  const drawingState = useUIStore((s) => s.drawingState)
+  // Selected *through* getImageFlowStep rather than off drawingState: this
+  // component is mounted for the whole session, and every tool rewrites
+  // drawingState on each pointer-move to update its cursor. Steps come from a
+  // fixed table, so the selected reference only changes when the step itself
+  // does - a room being drawn across the canvas no longer re-renders this.
+  const step = useUIStore((s) => getImageFlowStep(s.drawingState))
   const activeTool = useUIStore((s) => s.activeTool)
 
-  const step = getImageFlowStep(drawingState)
   if (!step) return null
 
   return (

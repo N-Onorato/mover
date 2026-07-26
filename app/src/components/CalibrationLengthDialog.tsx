@@ -22,17 +22,23 @@ import styles from './CalibrationLengthDialog.module.css'
  * the canvas stacking context.
  */
 export function CalibrationLengthDialog() {
-  const drawingState = useUIStore((s) => s.drawingState)
+  // Narrow selectors, not the whole drawingState: this dialog is mounted for
+  // the whole session, and every tool rewrites drawingState on each
+  // pointer-move to update its cursor. `points` keeps its array identity
+  // across those cursor updates, and steps come from a fixed table, so
+  // drawing a room across the canvas no longer re-renders the dialog.
+  const points = useUIStore((s) =>
+    s.drawingState?.kind === 'calibration' ? s.drawingState.points : null,
+  )
+  const step = useUIStore((s) => getImageFlowStep(s.drawingState))
   const units = useProjectStore((s) => s.project.settings.units)
   const [raw, setRaw] = useState('')
   const [error, setError] = useState<string | null>(null)
 
-  const active = drawingState?.kind === 'calibration' && drawingState.points.length >= 2
-  if (!active) return null
+  if (!points || points.length < 2) return null
 
-  const [p1, p2] = drawingState.points
+  const [p1, p2] = points
   const measured = distance(p1, p2)
-  const step = getImageFlowStep(drawingState)
 
   function reset() {
     setRaw('')

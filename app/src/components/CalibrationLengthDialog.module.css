@@ -1,55 +1,46 @@
+/* Shared modal chrome lives in modal.module.css - see the note there. Only
+ * the rules specific to this dialog are spelled out below. */
+
 .overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
+  composes: overlay from './modal.module.css';
 }
 
 .modal {
-  width: 360px;
-  max-width: 90vw;
-  max-height: 80vh;
-  overflow: auto;
-  background: #252525;
-  border: 1px solid #333;
-  border-radius: 6px;
-  display: flex;
-  flex-direction: column;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  composes: modal from './modal.module.css';
 }
 
 .header {
-  padding: 10px 12px;
-  font-size: 13px;
-  font-weight: 600;
-  color: #eee;
-  border-bottom: 1px solid #333;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  composes: header from './modal.module.css';
+}
+
+.closeButton {
+  composes: closeButton from './modal.module.css';
+}
+
+.field {
+  composes: field from './modal.module.css';
+}
+
+.fieldLabel {
+  composes: fieldLabel from './modal.module.css';
+}
+
+.input {
+  composes: input from './modal.module.css';
+}
+
+.hint {
+  composes: hint from './modal.module.css';
+}
+
+.error {
+  composes: error from './modal.module.css';
 }
 
 .step {
   font-size: 11px;
   font-weight: 500;
   color: #888;
-}
-
-.closeButton {
-  background: none;
-  border: none;
-  color: #999;
-  font-size: 18px;
-  line-height: 1;
-  cursor: pointer;
-  padding: 0 2px;
-}
-
-.closeButton:hover {
-  color: #eee;
 }
 
 .body {
@@ -63,44 +54,6 @@
   line-height: 1.5;
   color: #bbb;
   margin-bottom: 12px;
-}
-
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin-bottom: 4px;
-}
-
-.fieldLabel {
-  font-size: 11px;
-  color: #999;
-}
-
-.input {
-  padding: 5px 8px;
-  background: #1a1a1a;
-  border: 1px solid #444;
-  border-radius: 4px;
-  color: #eee;
-  font-size: 13px;
-  outline: none;
-}
-
-.input:focus {
-  border-color: #2d5be3;
-}
-
-.hint {
-  font-size: 11px;
-  color: #666;
-  margin-bottom: 10px;
-}
-
-.error {
-  font-size: 11px;
-  color: #e35d5d;
-  margin-bottom: 10px;
 }
 
 .actions {

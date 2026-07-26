@@ -9,18 +9,36 @@ import type { Room, InteriorWall, FurnitureInstance, ReferenceImage } from '../t
 import { resizeImagePatch, startRecalibration } from '../canvas/tools/ImageTool'
 import styles from './PropertiesPanel.module.css'
 
-export function useSnapshotOnFocus() {
+/** One history snapshot per interaction rather than per change event - a
+ * held-down slider or a dragged color swatch would otherwise bury the undo
+ * stack under a snapshot per frame. `take` is idempotent until `release`. */
+function useSnapshotOnce() {
   const snapshotTaken = useRef(false)
   return {
-    onFocus: () => {
+    take: () => {
       if (snapshotTaken.current) return
       snapshotTaken.current = true
       useHistoryStore.getState().pushSnapshot(useProjectStore.getState().project)
     },
-    onBlur: () => {
+    release: () => {
       snapshotTaken.current = false
     },
   }
+}
+
+/** useSnapshotOnce bound to a text field's focus/blur - the interaction
+ * boundary for a typed edit. */
+export function useSnapshotOnFocus() {
+  const { take, release } = useSnapshotOnce()
+  return { onFocus: take, onBlur: release }
+}
+
+/** Shared by every rotation field: parses degrees and wraps into [0, 360),
+ * or null when the input isn't a number. */
+function parseRotation(raw: string): number | null {
+  const value = Number(raw)
+  if (!Number.isFinite(value)) return null
+  return ((value % 360) + 360) % 360
 }
 
 interface UndoableFieldProps {
@@ -185,7 +203,7 @@ function InteriorWallProperties({ wall }: { wall: InteriorWall }) {
 function FurnitureProperties({ instance }: { instance: FurnitureInstance }) {
   const units = useProjectStore((s) => s.project.settings.units)
   const updateFurniture = useProjectStore((s) => s.updateFurniture)
-  const colorSnapshotTaken = useRef(false)
+  const colorSnapshot = useSnapshotOnce()
 
   function commitLabel(raw: string) {
     updateFurniture(instance.id, { label: raw.trim() === '' ? null : raw })
@@ -207,9 +225,9 @@ function FurnitureProperties({ instance }: { instance: FurnitureInstance }) {
   }
 
   function commitRotation(raw: string) {
-    const value = Number(raw)
-    if (!Number.isFinite(value)) return false
-    updateFurniture(instance.id, { rotation: ((value % 360) + 360) % 360 })
+    const rotation = parseRotation(raw)
+    if (rotation === null) return false
+    updateFurniture(instance.id, { rotation })
     return true
   }
 
@@ -234,15 +252,9 @@ function FurnitureProperties({ instance }: { instance: FurnitureInstance }) {
           type="color"
           value={instance.fillColor}
           // Pointer, not mouse: a touch drag on the swatch has to snapshot too.
-          onPointerDown={() => {
-            if (colorSnapshotTaken.current) return
-            colorSnapshotTaken.current = true
-            useHistoryStore.getState().pushSnapshot(useProjectStore.getState().project)
-          }}
+          onPointerDown={colorSnapshot.take}
           onChange={(e) => updateFurniture(instance.id, { fillColor: e.target.value })}
-          onBlur={() => {
-            colorSnapshotTaken.current = false
-          }}
+          onBlur={colorSnapshot.release}
         />
       </label>
     </div>
@@ -256,7 +268,9 @@ const MIN_IMAGE_SIZE = 1
 function ImageProperties({ image }: { image: ReferenceImage }) {
   const units = useProjectStore((s) => s.project.settings.units)
   const updateReferenceImage = useProjectStore((s) => s.updateReferenceImage)
-  const opacitySnapshotTaken = useRef(false)
+  // Pointer and key events, so touch and keyboard adjustment of the slider
+  // snapshot too. Mirrors the color swatch in FurnitureProperties.
+  const opacitySnapshot = useSnapshotOnce()
 
   function commitName(raw: string) {
     updateReferenceImage(image.id, { name: raw.trim() === '' ? 'Reference Image' : raw })
@@ -275,20 +289,10 @@ function ImageProperties({ image }: { image: ReferenceImage }) {
   }
 
   function commitRotation(raw: string) {
-    const value = Number(raw)
-    if (!Number.isFinite(value)) return false
-    updateReferenceImage(image.id, { rotation: ((value % 360) + 360) % 360 })
+    const rotation = parseRotation(raw)
+    if (rotation === null) return false
+    updateReferenceImage(image.id, { rotation })
     return true
-  }
-
-  // One snapshot per slider interaction, not per change event - otherwise a
-  // single drag buries the undo stack. Mirrors the color-picker pattern in
-  // FurnitureProperties, but on pointer/key events so touch and keyboard
-  // adjustment snapshot too.
-  function snapshotOpacityOnce() {
-    if (opacitySnapshotTaken.current) return
-    opacitySnapshotTaken.current = true
-    useHistoryStore.getState().pushSnapshot(useProjectStore.getState().project)
   }
 
   const opacityPct = Math.round(image.opacity * 100)
@@ -329,15 +333,11 @@ function ImageProperties({ image }: { image: ReferenceImage }) {
           max={100}
           step={1}
           value={opacityPct}
-          onPointerDown={snapshotOpacityOnce}
-          onKeyDown={snapshotOpacityOnce}
+          onPointerDown={opacitySnapshot.take}
+          onKeyDown={opacitySnapshot.take}
           onChange={(e) => updateReferenceImage(image.id, { opacity: Number(e.target.value) / 100 })}
-          onPointerUp={() => {
-            opacitySnapshotTaken.current = false
-          }}
-          onBlur={() => {
-            opacitySnapshotTaken.current = false
-          }}
+          onPointerUp={opacitySnapshot.release}
+          onBlur={opacitySnapshot.release}
         />
       </label>
       <div className={styles.hint}>{opacityPct}%</div>
@@ -373,22 +373,26 @@ export function PropertiesPanel() {
   const selectedImage =
     selectedIds.length === 1 ? referenceImages.find((img) => img.id === selectedIds[0]) : undefined
 
+  // Stated once rather than repeated per empty-state branch, so a new entity
+  // type is one edit here instead of one per branch.
+  const hasSingleSelection = !!(
+    selectedRoom ||
+    selectedWallEntity ||
+    selectedFurniture ||
+    selectedImage
+  )
+
   return (
     <div className={styles.panel}>
       <div className={styles.header}>Properties</div>
       <div className={styles.body}>
-        {!selectedRoom &&
-          !selectedWallEntity &&
-          !selectedFurniture &&
-          !selectedImage &&
-          selectedIds.length === 0 && <p className={styles.empty}>Nothing selected</p>}
-        {!selectedRoom &&
-          !selectedWallEntity &&
-          !selectedFurniture &&
-          !selectedImage &&
-          selectedIds.length > 0 && (
-            <p className={styles.empty}>{selectedIds.length} item(s) selected</p>
-          )}
+        {!hasSingleSelection && (
+          <p className={styles.empty}>
+            {selectedIds.length === 0
+              ? 'Nothing selected'
+              : `${selectedIds.length} item(s) selected`}
+          </p>
+        )}
         {selectedWallEntity && <InteriorWallProperties wall={selectedWallEntity} />}
         {selectedRoom && selectedWall && selectedWall.roomId === selectedRoom.id && (
           <WallProperties room={selectedRoom} edgeIndex={selectedWall.edgeIndex} />

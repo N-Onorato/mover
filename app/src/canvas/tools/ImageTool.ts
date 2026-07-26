@@ -3,7 +3,7 @@ import type { Point, ReferenceImage } from '../../types/project'
 import { useUIStore, cancelDrawingGesture } from '../../store/uiStore'
 import { useProjectStore } from '../../store/projectStore'
 import { useHistoryStore } from '../../store/historyStore'
-import { distance } from '../../utils/geometry'
+import { distance, scalePointAbout } from '../../utils/geometry'
 import { openImageFile, ImageLoadError, type LoadedImage } from '../../io/loadImage'
 
 const DEFAULT_WIDTH_WORLD_UNITS = 96 // ~8ft at default (uncalibrated) scale
@@ -102,7 +102,7 @@ export function calibrationPatch(
     ...scaleImageAbout(image, s, p1),
     calibration: {
       p1,
-      p2: { x: p1.x + s * (p2.x - p1.x), y: p1.y + s * (p2.y - p1.y) },
+      p2: scalePointAbout(p2, p1, s),
       realWorldDistance: realLength,
     },
   }
@@ -118,10 +118,7 @@ export function scaleImageAbout(
   anchor: Point,
 ): Pick<ReferenceImage, 'x' | 'y' | 'width' | 'height'> {
   const center = { x: image.x + image.width / 2, y: image.y + image.height / 2 }
-  const scaledCenter = {
-    x: anchor.x + s * (center.x - anchor.x),
-    y: anchor.y + s * (center.y - anchor.y),
-  }
+  const scaledCenter = scalePointAbout(center, anchor, s)
   const width = image.width * s
   const height = image.height * s
   return { x: scaledCenter.x - width / 2, y: scaledCenter.y - height / 2, width, height }
@@ -145,14 +142,8 @@ export function resizeImagePatch(
     ...scaleImageAbout(image, scale, anchor),
     calibration: image.calibration
       ? {
-          p1: {
-            x: anchor.x + scale * (image.calibration.p1.x - anchor.x),
-            y: anchor.y + scale * (image.calibration.p1.y - anchor.y),
-          },
-          p2: {
-            x: anchor.x + scale * (image.calibration.p2.x - anchor.x),
-            y: anchor.y + scale * (image.calibration.p2.y - anchor.y),
-          },
+          p1: scalePointAbout(image.calibration.p1, anchor, scale),
+          p2: scalePointAbout(image.calibration.p2, anchor, scale),
           realWorldDistance: image.calibration.realWorldDistance * scale,
         }
       : null,

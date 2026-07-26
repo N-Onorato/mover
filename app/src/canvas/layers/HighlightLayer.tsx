@@ -23,6 +23,23 @@ function vertexRadiusPx(wallThicknessWorld: number, ppu: number): number {
 
 const FURNITURE_HANDLE_RADIUS_PX = FURNITURE_HANDLE_HIT_THRESHOLD_PX - 3
 
+/** The "this is selected" dashed outline, identical for every entity type
+ * (room polygon, furniture box, reference image box, interior-wall segment) so
+ * the types can't visually drift apart. Open segments are drawn thicker to
+ * stay visible without an enclosed area to read. */
+function SelectionOutline({ points, closed = true }: { points: number[]; closed?: boolean }) {
+  return (
+    <Line
+      points={points}
+      closed={closed}
+      stroke="#ffb400"
+      strokeWidth={closed ? 2 : 4}
+      dash={[8, 4]}
+      listening={false}
+    />
+  )
+}
+
 export function HighlightLayer({ pixelsPerUnit: ppu }: Props) {
   const selectedIds = useUIStore((s) => s.selectedIds)
   const selectedWall = useUIStore((s) => s.selectedWall)
@@ -131,15 +148,7 @@ export function HighlightLayer({ pixelsPerUnit: ppu }: Props) {
     return (
       <Layer listening={false}>
         {outlines.map((o, i) => (
-          <Line
-            key={i}
-            points={o.points}
-            closed={o.closed}
-            stroke="#ffb400"
-            strokeWidth={o.closed ? 2 : 4}
-            dash={[8, 4]}
-            listening={false}
-          />
+          <SelectionOutline key={i} points={o.points} closed={o.closed} />
         ))}
       </Layer>
     )
@@ -223,16 +232,7 @@ export function HighlightLayer({ pixelsPerUnit: ppu }: Props) {
 
   return (
     <Layer listening={false}>
-      {flatPoints && (
-        <Line
-          points={flatPoints}
-          closed
-          stroke="#ffb400"
-          strokeWidth={2}
-          dash={[8, 4]}
-          listening={false}
-        />
-      )}
+      {flatPoints && <SelectionOutline points={flatPoints} />}
       {wallSegment && (
         <Line points={wallSegment} stroke="#ff5a36" strokeWidth={4} listening={false} />
       )}
@@ -250,26 +250,8 @@ export function HighlightLayer({ pixelsPerUnit: ppu }: Props) {
           listening={false}
         />
       ))}
-      {imageOutline && (
-        <Line
-          points={imageOutline}
-          closed
-          stroke="#ffb400"
-          strokeWidth={2}
-          dash={[8, 4]}
-          listening={false}
-        />
-      )}
-      {furnitureOutline && (
-        <Line
-          points={furnitureOutline}
-          closed
-          stroke="#ffb400"
-          strokeWidth={2}
-          dash={[8, 4]}
-          listening={false}
-        />
-      )}
+      {imageOutline && <SelectionOutline points={imageOutline} />}
+      {furnitureOutline && <SelectionOutline points={furnitureOutline} />}
       {furnitureHandles.map((p, i) => (
         <Circle
           key={`furniture-handle-${i}`}
