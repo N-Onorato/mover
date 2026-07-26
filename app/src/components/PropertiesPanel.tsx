@@ -5,7 +5,8 @@ import { useHistoryStore } from '../store/historyStore'
 import { distance, polygonBoundingBox } from '../utils/geometry'
 import { formatLength, parseLength } from '../utils/units'
 import { MIN_FURNITURE_SIZE } from '../furniture/catalog'
-import type { Room, InteriorWall, FurnitureInstance } from '../types/project'
+import type { Room, InteriorWall, FurnitureInstance, ReferenceImage } from '../types/project'
+import { resizeImagePatch, startRecalibration } from '../canvas/tools/ImageTool'
 import styles from './PropertiesPanel.module.css'
 
 export function useSnapshotOnFocus() {
@@ -232,7 +233,8 @@ function FurnitureProperties({ instance }: { instance: FurnitureInstance }) {
           className={styles.input}
           type="color"
           value={instance.fillColor}
-          onMouseDown={() => {
+          // Pointer, not mouse: a touch drag on the swatch has to snapshot too.
+          onPointerDown={() => {
             if (colorSnapshotTaken.current) return
             colorSnapshotTaken.current = true
             useHistoryStore.getState().pushSnapshot(useProjectStore.getState().project)
@@ -247,12 +249,120 @@ function FurnitureProperties({ instance }: { instance: FurnitureInstance }) {
   )
 }
 
+/** Minimum on-canvas size for a reference image, in world units - stops a
+ * fat-fingered width of 0 from making the image unselectable. */
+const MIN_IMAGE_SIZE = 1
+
+function ImageProperties({ image }: { image: ReferenceImage }) {
+  const units = useProjectStore((s) => s.project.settings.units)
+  const updateReferenceImage = useProjectStore((s) => s.updateReferenceImage)
+  const opacitySnapshotTaken = useRef(false)
+
+  function commitName(raw: string) {
+    updateReferenceImage(image.id, { name: raw.trim() === '' ? 'Reference Image' : raw })
+    return true
+  }
+
+  // Width and height are one control in two boxes: editing either rescales the
+  // image uniformly, so the photo can't be stretched out of proportion.
+  function commitScaledSize(raw: string, current: number) {
+    const result = parseLength(raw, units)
+    if (!result.ok) return false
+    const patch = resizeImagePatch(image, Math.max(MIN_IMAGE_SIZE, result.value) / current)
+    if (!patch) return false
+    updateReferenceImage(image.id, patch)
+    return true
+  }
+
+  function commitRotation(raw: string) {
+    const value = Number(raw)
+    if (!Number.isFinite(value)) return false
+    updateReferenceImage(image.id, { rotation: ((value % 360) + 360) % 360 })
+    return true
+  }
+
+  // One snapshot per slider interaction, not per change event - otherwise a
+  // single drag buries the undo stack. Mirrors the color-picker pattern in
+  // FurnitureProperties, but on pointer/key events so touch and keyboard
+  // adjustment snapshot too.
+  function snapshotOpacityOnce() {
+    if (opacitySnapshotTaken.current) return
+    opacitySnapshotTaken.current = true
+    useHistoryStore.getState().pushSnapshot(useProjectStore.getState().project)
+  }
+
+  const opacityPct = Math.round(image.opacity * 100)
+
+  return (
+    <div className={styles.section}>
+      <div className={styles.sectionTitle}>Reference Image</div>
+      <UndoableField label="Name" value={image.name} onCommit={commitName} />
+      <UndoableField
+        label="Width"
+        type="number"
+        value={image.width.toFixed(1)}
+        onCommit={(raw) => commitScaledSize(raw, image.width)}
+      />
+      <div className={styles.hint}>{formatLength(image.width, units)}</div>
+      <UndoableField
+        label="Height"
+        type="number"
+        value={image.height.toFixed(1)}
+        onCommit={(raw) => commitScaledSize(raw, image.height)}
+      />
+      <div className={styles.hint}>
+        {formatLength(image.height, units)} — width and height scale together to keep the photo in
+        proportion.
+      </div>
+      <UndoableField
+        label="Rotation"
+        type="number"
+        value={image.rotation.toFixed(0)}
+        onCommit={commitRotation}
+      />
+      <label className={styles.field}>
+        <span className={styles.fieldLabel}>Opacity</span>
+        <input
+          className={styles.range}
+          type="range"
+          min={0}
+          max={100}
+          step={1}
+          value={opacityPct}
+          onPointerDown={snapshotOpacityOnce}
+          onKeyDown={snapshotOpacityOnce}
+          onChange={(e) => updateReferenceImage(image.id, { opacity: Number(e.target.value) / 100 })}
+          onPointerUp={() => {
+            opacitySnapshotTaken.current = false
+          }}
+          onBlur={() => {
+            opacitySnapshotTaken.current = false
+          }}
+        />
+      </label>
+      <div className={styles.hint}>{opacityPct}%</div>
+      <div className={styles.hint}>
+        {image.calibration
+          ? `Calibrated: ${formatLength(image.calibration.realWorldDistance, units)} reference line`
+          : 'Not calibrated — this photo has no real-world scale yet.'}
+      </div>
+      <button className={styles.button} onClick={() => startRecalibration(image.id)}>
+        Recalibrate
+      </button>
+      <div className={styles.hint}>
+        Click two points on the photo and enter the real distance between them.
+      </div>
+    </div>
+  )
+}
+
 export function PropertiesPanel() {
   const selectedIds = useUIStore((s) => s.selectedIds)
   const selectedWall = useUIStore((s) => s.selectedWall)
   const rooms = useProjectStore((s) => s.project.rooms)
   const interiorWalls = useProjectStore((s) => s.project.interiorWalls)
   const furnitureInstances = useProjectStore((s) => s.project.furnitureInstances)
+  const referenceImages = useProjectStore((s) => s.project.referenceImages)
 
   const selectedRoom =
     selectedIds.length === 1 ? rooms.find((r) => r.id === selectedIds[0]) : undefined
@@ -260,17 +370,25 @@ export function PropertiesPanel() {
     selectedIds.length === 1 ? interiorWalls.find((w) => w.id === selectedIds[0]) : undefined
   const selectedFurniture =
     selectedIds.length === 1 ? furnitureInstances.find((f) => f.id === selectedIds[0]) : undefined
+  const selectedImage =
+    selectedIds.length === 1 ? referenceImages.find((img) => img.id === selectedIds[0]) : undefined
 
   return (
     <div className={styles.panel}>
       <div className={styles.header}>Properties</div>
       <div className={styles.body}>
-        {!selectedRoom && !selectedWallEntity && !selectedFurniture && selectedIds.length === 0 && (
-          <p className={styles.empty}>Nothing selected</p>
-        )}
-        {!selectedRoom && !selectedWallEntity && !selectedFurniture && selectedIds.length > 0 && (
-          <p className={styles.empty}>{selectedIds.length} item(s) selected</p>
-        )}
+        {!selectedRoom &&
+          !selectedWallEntity &&
+          !selectedFurniture &&
+          !selectedImage &&
+          selectedIds.length === 0 && <p className={styles.empty}>Nothing selected</p>}
+        {!selectedRoom &&
+          !selectedWallEntity &&
+          !selectedFurniture &&
+          !selectedImage &&
+          selectedIds.length > 0 && (
+            <p className={styles.empty}>{selectedIds.length} item(s) selected</p>
+          )}
         {selectedWallEntity && <InteriorWallProperties wall={selectedWallEntity} />}
         {selectedRoom && selectedWall && selectedWall.roomId === selectedRoom.id && (
           <WallProperties room={selectedRoom} edgeIndex={selectedWall.edgeIndex} />
@@ -280,6 +398,9 @@ export function PropertiesPanel() {
         )}
         {!selectedRoom && !selectedWallEntity && selectedFurniture && (
           <FurnitureProperties instance={selectedFurniture} />
+        )}
+        {!selectedRoom && !selectedWallEntity && !selectedFurniture && selectedImage && (
+          <ImageProperties image={selectedImage} />
         )}
       </div>
     </div>

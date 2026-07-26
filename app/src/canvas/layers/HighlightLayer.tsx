@@ -74,6 +74,13 @@ export function HighlightLayer({ pixelsPerUnit: ppu }: Props) {
     selectedFurniture = { ...selectedFurnitureBase, rotation: dragState.currentRotation }
   }
 
+  const selectedImageBase =
+    selectedIds.length === 1 ? referenceImages.find((img) => img.id === selectedIds[0]) : undefined
+  const selectedImage =
+    selectedImageBase && dragState?.kind === 'multi' && dragState.imageIds.includes(selectedImageBase.id)
+      ? { ...selectedImageBase, x: selectedImageBase.x + dragState.dx, y: selectedImageBase.y + dragState.dy }
+      : selectedImageBase
+
   // Multi-select: no resize/rotate/vertex handles (those only make sense for
   // a single entity), just a plain outline per selected item so a marquee or
   // shift-click selection is visually confirmed.
@@ -91,7 +98,7 @@ export function HighlightLayer({ pixelsPerUnit: ppu }: Props) {
       }
     }
     for (const f of furnitureInstances) {
-      if (idSet.has(f.id) && !f.locked) {
+      if (idSet.has(f.id) && f.visible && !f.locked) {
         const withPos =
           multiDrag && multiDrag.furnitureIds.includes(f.id)
             ? { ...f, x: f.x + multiDrag.dx, y: f.y + multiDrag.dy }
@@ -112,8 +119,12 @@ export function HighlightLayer({ pixelsPerUnit: ppu }: Props) {
       }
     }
     for (const img of referenceImages) {
-      if (idSet.has(img.id)) {
-        outlines.push({ points: imageCorners(img).flatMap((p) => [p.x * ppu, p.y * ppu]), closed: true })
+      if (idSet.has(img.id) && img.visible && !img.locked) {
+        const withPos =
+          multiDrag && multiDrag.imageIds.includes(img.id)
+            ? { ...img, x: img.x + multiDrag.dx, y: img.y + multiDrag.dy }
+            : img
+        outlines.push({ points: imageCorners(withPos).flatMap((p) => [p.x * ppu, p.y * ppu]), closed: true })
       }
     }
 
@@ -134,7 +145,8 @@ export function HighlightLayer({ pixelsPerUnit: ppu }: Props) {
     )
   }
 
-  if (!selectedRoom && !selectedWallEntity && !selectedFurniture) return <Layer listening={false} />
+  if (!selectedRoom && !selectedWallEntity && !selectedFurniture && !selectedImage)
+    return <Layer listening={false} />
 
   let flatPoints: number[] | null = null
   let wallSegment: number[] | null = null
@@ -201,6 +213,14 @@ export function HighlightLayer({ pixelsPerUnit: ppu }: Props) {
     rotateStalk = [topMid.x * ppu, topMid.y * ppu, rotateHandlePt.x, rotateHandlePt.y]
   }
 
+  // L3: a solo-selected reference image gets the same dashed outline every
+  // other entity type gets. Outline only - resizing and rotating an image is a
+  // PropertiesPanel concern, so there are no on-canvas handles to draw.
+  let imageOutline: number[] | null = null
+  if (selectedImage && selectedImage.visible && !selectedImage.locked) {
+    imageOutline = imageCorners(selectedImage).flatMap((p) => [p.x * ppu, p.y * ppu])
+  }
+
   return (
     <Layer listening={false}>
       {flatPoints && (
@@ -230,6 +250,16 @@ export function HighlightLayer({ pixelsPerUnit: ppu }: Props) {
           listening={false}
         />
       ))}
+      {imageOutline && (
+        <Line
+          points={imageOutline}
+          closed
+          stroke="#ffb400"
+          strokeWidth={2}
+          dash={[8, 4]}
+          listening={false}
+        />
+      )}
       {furnitureOutline && (
         <Line
           points={furnitureOutline}

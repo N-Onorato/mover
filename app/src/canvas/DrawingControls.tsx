@@ -23,6 +23,12 @@ export function DrawingControls() {
   const canFinish = isRoom && drawingState.points.length >= 3
   const canUndoPoint = isRoom && drawingState.points.length > 1
 
+  // I4 (#23): the reference-image flow has its own always-visible Cancel in
+  // FlowIndicator, which renders on touch too - so this cluster would be a
+  // second, redundant Cancel button during that flow.
+  const inImageFlow = drawingState.kind === 'imageOrigin' || drawingState.kind === 'calibration'
+  if (inImageFlow) return null
+
   return (
     <div className={styles.controls}>
       {isRoom && (

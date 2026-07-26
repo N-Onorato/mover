@@ -32,7 +32,11 @@ export function LayerPanel() {
             <button
               className={`${styles.iconBtn} ${lockedLayers[layer.id] ? styles.locked : ''}`}
               onClick={() => toggleLock(layer.id)}
-              title="Toggle lock"
+              title={
+                lockedLayers[layer.id]
+                  ? 'Unlock layer (items become selectable)'
+                  : 'Lock layer (items become click-through)'
+              }
             >
               {lockedLayers[layer.id] ? 'L' : 'U'}
             </button>

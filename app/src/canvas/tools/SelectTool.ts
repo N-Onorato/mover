@@ -97,16 +97,17 @@ export function furnitureRotateHandle(f: FurnitureInstance, ppu: number): Point 
 let lastClickMs = 0
 let lastClickEdge: { roomId: string; edgeIndex: number } | null = null
 
-/** Builds a MultiDragState covering every room/furniture/interior-wall in
- * `selectedIds` (plus any interior wall anchored to a selected room),
- * filtered the same way each type's own hit test already filters
- * (invisible/locked entities, or those under a locked parent room, never
- * join a drag). This is the sole drag-construction path for all three body
- * hit tests below, whether `selectedIds` is the whole current selection (item
- * clicked was already part of a >1-item selection) or just the one clicked
- * item (nothing else selected). */
+/** Builds a MultiDragState covering every room/furniture/interior-wall/
+ * reference-image in `selectedIds` (plus any interior wall anchored to a
+ * selected room), filtered the same way each type's own hit test already
+ * filters (invisible/locked entities, or those under a locked parent room,
+ * never join a drag). This is the sole drag-construction path for all four
+ * body hit tests below, whether `selectedIds` is the whole current selection
+ * (item clicked was already part of a >1-item selection) or just the one
+ * clicked item (nothing else selected). */
 function buildMultiDragState(selectedIds: string[]): MultiDragState {
-  const { rooms, interiorWalls, furnitureInstances } = useProjectStore.getState().project
+  const { rooms, interiorWalls, furnitureInstances, referenceImages } =
+    useProjectStore.getState().project
   const selectedSet = new Set(selectedIds)
   const roomsById = new Map(rooms.map((r) => [r.id, r]))
 
@@ -125,7 +126,11 @@ function buildMultiDragState(selectedIds: string[]): MultiDragState {
     })
     .map((w) => w.id)
 
-  return { kind: 'multi', roomIds, furnitureIds, wallIds, dx: 0, dy: 0 }
+  const imageIds = referenceImages
+    .filter((img) => selectedSet.has(img.id) && img.visible && !img.locked)
+    .map((img) => img.id)
+
+  return { kind: 'multi', roomIds, furnitureIds, wallIds, imageIds, dx: 0, dy: 0 }
 }
 
 /** Shared onPointerDown tail for all three body hit tests (furniture/wall/
@@ -140,6 +145,31 @@ function startMultiDrag(selectedIds: string[], worldPt: Point) {
 }
 
 export const SelectTool: ToolHandlers = {
+  /** M2 (#33) - the click-priority rule, stated once so the ordering below is
+   * a decision rather than an accident of how the steps were appended:
+   *
+   *   **The topmost unlocked, visible layer under the cursor wins a click.**
+   *
+   * LayoutCanvas paints reference images -> rooms -> interior walls ->
+   * furniture, so the hit tests below run in the *reverse* of paint order:
+   * furniture, then room vertex/edge, then interior wall, then room body,
+   * then reference image, then (nothing hit) marquee. Every step returns on
+   * first match.
+   *
+   * The consequence worth knowing: a reference image is usually imported
+   * specifically to trace a room over, so the finished room covers it. While
+   * the rooms layer is unlocked, clicks in that overlap select the room - the
+   * image is not click-reachable there. That is intended, and it is stable:
+   * it depends only on which layers are unlocked, never on where inside the
+   * shape you happen to click. Two deterministic ways to reach a covered
+   * image:
+   *   1. lock the Rooms layer in the Layers panel, or
+   *   2. marquee-select it - onPointerUp unions matches across every entity
+   *      type instead of taking the first hit, so z-order doesn't apply.
+   *
+   * Reference images also ship with their layer locked by default
+   * (uiStore's lockedLayers.referenceImages), which is deliberate: a tracing
+   * photo shouldn't be grabbable while you draw over it. */
   onPointerDown(worldPt: Point, rawWorldPt: Point, ppu: number, modifiers: PointerModifiers) {
     const { setInteractionMode, setDragAnchorWorld } = useUIStore.getState()
     setInteractionMode('idle')
@@ -155,7 +185,7 @@ export const SelectTool: ToolHandlers = {
       setMarquee,
     } = useUIStore.getState()
 
-    // 0. Furniture handle hit test - only relevant while exactly one
+    // 1. Furniture handle hit test - only relevant while exactly one
     // furniture instance is selected. Runs before every other hit test so
     // handles stay grabbable even where they overlap a room edge/vertex.
     if (!lockedLayers.furniture && selectedIds.length === 1) {
@@ -200,11 +230,10 @@ export const SelectTool: ToolHandlers = {
       }
     }
 
-    // 0b. Furniture body hit test - select and begin a move drag. Gated
+    // 2. Furniture body hit test - select and begin a move drag. Gated
     // independently by lockedLayers.furniture (not lockedLayers.rooms), and
-    // runs before every room/wall test since FurnitureLayer renders on top
-    // of rooms/walls visually - clicking furniture should select it, not
-    // whatever room sits underneath.
+    // runs before every room/wall test because furniture paints on top of
+    // them (see the priority rule above).
     if (!lockedLayers.furniture) {
       for (let fi = furnitureInstances.length - 1; fi >= 0; fi--) {
         const f = furnitureInstances[fi]
@@ -218,13 +247,13 @@ export const SelectTool: ToolHandlers = {
       }
     }
 
-    // Read once and reused below (5.5's reference-image test sits between
+    // Read once and reused below (step 8's reference-image test sits between
     // this room block and the marquee fallback, but is independently gated
     // by lockedLayers.referenceImages so it needed to leave this condition).
     const roomsUnlocked = !lockedLayers.rooms
 
     if (roomsUnlocked) {
-      // 1. Vertex hit test takes priority over edge hit test (vertices sit on
+      // 3. Vertex hit test takes priority over edge hit test (vertices sit on
       // edges' endpoints).
       for (let ri = rooms.length - 1; ri >= 0; ri--) {
         const room = rooms[ri]
@@ -249,7 +278,7 @@ export const SelectTool: ToolHandlers = {
         }
       }
 
-      // 2. Edge (wall) hit test - single-select / wall-select behavior,
+      // 4. Edge (wall) hit test - single-select / wall-select behavior,
       // starts a wall drag, or (E3b) inserts a vertex on double-click.
       for (let ri = rooms.length - 1; ri >= 0; ri--) {
         const room = rooms[ri]
@@ -300,7 +329,7 @@ export const SelectTool: ToolHandlers = {
         }
       }
 
-      // 3. Interior wall endpoint hit test (E3) - begin an endpoint drag.
+      // 5. Interior wall endpoint hit test (E3) - begin an endpoint drag.
       // Runs after perimeter vertex/edge tests so the outer shell takes
       // priority over interior walls.
       for (let wi = interiorWalls.length - 1; wi >= 0; wi--) {
@@ -331,7 +360,7 @@ export const SelectTool: ToolHandlers = {
         }
       }
 
-      // 4. Interior wall body hit test (E3) - select and begin a whole-wall
+      // 6. Interior wall body hit test (E3) - select and begin a whole-wall
       // drag.
       for (let wi = interiorWalls.length - 1; wi >= 0; wi--) {
         const wall = interiorWalls[wi]
@@ -346,7 +375,7 @@ export const SelectTool: ToolHandlers = {
         }
       }
 
-      // 5. Room body hit test - select and (E5) begin a room drag. If the
+      // 7. Room body hit test - select and (E5) begin a room drag. If the
       // clicked room is part of an existing multi-selection, drag every
       // selected room together, preserving relative positions.
       for (let ri = rooms.length - 1; ri >= 0; ri--) {
@@ -363,23 +392,25 @@ export const SelectTool: ToolHandlers = {
       }
     }
 
-    // 5.5. Reference image hit test (I3) - images render beneath
-    // rooms/furniture, so this runs after those hit tests fail to find
-    // anything. Gated independently by lockedLayers.referenceImages (not
-    // lockedLayers.rooms), same as the furniture body test above.
+    // 8. Reference image hit test (I3) - last before the marquee fallback,
+    // because images are the bottom-most painted layer (see the priority rule
+    // on this handler). Gated independently by lockedLayers.referenceImages
+    // (not lockedLayers.rooms), same as the furniture body test above, so
+    // locking Rooms is what lets a click reach an image underneath one.
     if (!lockedLayers.referenceImages) {
       for (let ii = referenceImages.length - 1; ii >= 0; ii--) {
         const img = referenceImages[ii]
         if (!img.visible || img.locked) continue
         if (pointInRotatedRect(rawWorldPt, img, img.rotation)) {
-          setSelection([img.id])
-          lastClickEdge = null
+          const isMultiSelected = selectedIds.length > 1 && selectedIds.includes(img.id)
+          if (!isMultiSelected) setSelection([img.id])
+          startMultiDrag(isMultiSelected ? selectedIds : [img.id], worldPt)
           return
         }
       }
     }
 
-    // 6. Nothing hit: begin a marquee drag. Whether this ends up being a
+    // 9. Nothing hit: begin a marquee drag. Whether this ends up being a
     // plain click (deselect) or an actual drag (box-select) is resolved on
     // pointer-up, once we know the total drag distance. This always starts,
     // regardless of any layer's lock state - locked layers only affect which
@@ -618,6 +649,7 @@ export const SelectTool: ToolHandlers = {
         const roomsById = new Map(project.rooms.map((r) => [r.id, r]))
         const furnitureById = new Map(project.furnitureInstances.map((f) => [f.id, f]))
         const wallsById = new Map(project.interiorWalls.map((w) => [w.id, w]))
+        const imagesById = new Map(project.referenceImages.map((img) => [img.id, img]))
 
         for (const id of dragState.roomIds) {
           const room = roomsById.get(id)
@@ -639,6 +671,26 @@ export const SelectTool: ToolHandlers = {
               b: { x: w.b.x + dx, y: w.b.y + dy },
             })
           }
+        }
+        for (const id of dragState.imageIds) {
+          const img = imagesById.get(id)
+          if (!img) continue
+          // Only x/y move: width/height/rotation are untouched, so a
+          // calibrated image keeps its scale by construction. The calibration
+          // points ride along because they're stored in world space (see
+          // specs/data-model.md) - leaving them behind would make a later
+          // Recalibrate anchor on a point that's no longer on the photo.
+          useProjectStore.getState().updateReferenceImage(id, {
+            x: img.x + dx,
+            y: img.y + dy,
+            calibration: img.calibration
+              ? {
+                  ...img.calibration,
+                  p1: { x: img.calibration.p1.x + dx, y: img.calibration.p1.y + dy },
+                  p2: { x: img.calibration.p2.x + dx, y: img.calibration.p2.y + dy },
+                }
+              : null,
+          })
         }
       }
       setDragState(null)

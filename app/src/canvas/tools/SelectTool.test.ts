@@ -2,7 +2,8 @@ import { describe, expect, it, beforeEach } from 'vitest'
 import { SelectTool } from './SelectTool'
 import { useUIStore } from '../../store/uiStore'
 import { useProjectStore } from '../../store/projectStore'
-import type { FurnitureInstance, InteriorWall, Room } from '../../types/project'
+import { useHistoryStore } from '../../store/historyStore'
+import type { FurnitureInstance, InteriorWall, ReferenceImage, Room } from '../../types/project'
 
 function makeFurniture(patch: Partial<FurnitureInstance> = {}): FurnitureInstance {
   return {
@@ -49,6 +50,26 @@ function makeInteriorWall(patch: Partial<InteriorWall> = {}): InteriorWall {
     thickness: 4,
     locked: false,
     visible: true,
+    ...patch,
+  }
+}
+
+/** Deliberately shares makeRoom's 0,0-20,20 footprint: "image under a room"
+ * is the normal case (#33) and needs no extra setup. */
+function makeReferenceImage(patch: Partial<ReferenceImage> = {}): ReferenceImage {
+  return {
+    id: 'img-1',
+    name: 'Reference Image',
+    src: '',
+    x: 0,
+    y: 0,
+    width: 20,
+    height: 20,
+    rotation: 0,
+    opacity: 0.6,
+    locked: false,
+    visible: true,
+    calibration: null,
     ...patch,
   }
 }
@@ -324,5 +345,300 @@ describe('SelectTool multi-item drag (#27)', () => {
     expect(project.rooms).toEqual([])
     expect(project.furnitureInstances).toEqual([])
     expect(useUIStore.getState().selectedIds).toEqual([])
+  })
+})
+
+/** M2 (#33): the click-priority rule is "topmost unlocked, visible layer under
+ * the cursor wins". These lock that ordering so it can't silently regress back
+ * into geometry-dependent behavior. */
+describe('SelectTool reference-image click priority (#33)', () => {
+  beforeEach(() => {
+    useUIStore.setState({
+      selectedIds: [],
+      dragState: null,
+      interactionMode: 'idle',
+      dragAnchorWorld: null,
+      marquee: null,
+      lockedLayers: {
+        referenceImages: false,
+        rooms: false,
+        furniture: false,
+        annotations: false,
+      },
+    })
+    useProjectStore.setState((s) => ({
+      project: {
+        ...s.project,
+        rooms: [],
+        interiorWalls: [],
+        furnitureInstances: [],
+        referenceImages: [],
+        settings: { ...s.project.settings, snapToGrid: false },
+      },
+    }))
+  })
+
+  function clickAt(pt: { x: number; y: number }) {
+    SelectTool.onPointerDown(pt, pt, 10, { shift: false, ctrl: false })
+  }
+
+  it('selects the room, not the reference image beneath it, when both layers are unlocked', () => {
+    useProjectStore.setState((s) => ({
+      project: { ...s.project, rooms: [makeRoom()], referenceImages: [makeReferenceImage()] },
+    }))
+
+    clickAt({ x: 10, y: 10 })
+
+    expect(useUIStore.getState().selectedIds).toEqual(['room-1'])
+  })
+
+  it('selects the reference image beneath the room once the rooms layer is locked', () => {
+    useProjectStore.setState((s) => ({
+      project: { ...s.project, rooms: [makeRoom()], referenceImages: [makeReferenceImage()] },
+    }))
+    useUIStore.setState((s) => ({ lockedLayers: { ...s.lockedLayers, rooms: true } }))
+
+    clickAt({ x: 10, y: 10 })
+
+    expect(useUIStore.getState().selectedIds).toEqual(['img-1'])
+  })
+
+  it('selects a reference image that no room covers', () => {
+    useProjectStore.setState((s) => ({
+      project: {
+        ...s.project,
+        rooms: [makeRoom({ points: [
+          { x: 100, y: 100 },
+          { x: 120, y: 100 },
+          { x: 120, y: 120 },
+          { x: 100, y: 120 },
+        ] })],
+        referenceImages: [makeReferenceImage()],
+      },
+    }))
+
+    clickAt({ x: 10, y: 10 })
+
+    expect(useUIStore.getState().selectedIds).toEqual(['img-1'])
+  })
+
+  it('selects furniture drawn over a reference image, not the image', () => {
+    useProjectStore.setState((s) => ({
+      project: {
+        ...s.project,
+        furnitureInstances: [makeFurniture({ x: 8, y: 8, width: 6, depth: 6 })],
+        referenceImages: [makeReferenceImage()],
+      },
+    }))
+
+    clickAt({ x: 10, y: 10 })
+
+    expect(useUIStore.getState().selectedIds).toEqual(['furn-1'])
+  })
+
+  it('never click-selects an image while the reference-images layer is locked (the default)', () => {
+    useProjectStore.setState((s) => ({
+      project: { ...s.project, referenceImages: [makeReferenceImage()] },
+    }))
+    useUIStore.setState((s) => ({ lockedLayers: { ...s.lockedLayers, referenceImages: true } }))
+
+    clickAt({ x: 10, y: 10 })
+
+    expect(useUIStore.getState().selectedIds).toEqual([])
+    expect(useUIStore.getState().interactionMode).toBe('marquee')
+  })
+
+  it('ignores an item-locked or hidden image and falls through to a marquee', () => {
+    useProjectStore.setState((s) => ({
+      project: {
+        ...s.project,
+        referenceImages: [
+          makeReferenceImage({ id: 'img-locked', locked: true }),
+          makeReferenceImage({ id: 'img-hidden', visible: false }),
+        ],
+      },
+    }))
+
+    clickAt({ x: 10, y: 10 })
+
+    expect(useUIStore.getState().selectedIds).toEqual([])
+    expect(useUIStore.getState().interactionMode).toBe('marquee')
+  })
+
+  it('marquee-selects a covered image together with the room on top of it', () => {
+    // The documented escape hatch: marquee unions across entity types instead
+    // of taking the first hit, so z-order doesn't apply.
+    useProjectStore.setState((s) => ({
+      project: { ...s.project, rooms: [makeRoom()], referenceImages: [makeReferenceImage()] },
+    }))
+
+    const from = { x: -5, y: -5 }
+    const to = { x: 30, y: 30 }
+    SelectTool.onPointerDown(from, from, 10, { shift: false, ctrl: false })
+    SelectTool.onPointerMove(to, 10, { shift: false, ctrl: false })
+    SelectTool.onPointerUp(to, 10, { shift: false, ctrl: false })
+
+    expect(useUIStore.getState().selectedIds).toContain('img-1')
+    expect(useUIStore.getState().selectedIds).toContain('room-1')
+  })
+})
+
+/** L3 (#30): images join the rigid-translation drag path. */
+describe('SelectTool reference-image drag (#30)', () => {
+  beforeEach(() => {
+    useUIStore.setState({
+      selectedIds: [],
+      dragState: null,
+      interactionMode: 'idle',
+      dragAnchorWorld: null,
+      marquee: null,
+      lockedLayers: {
+        referenceImages: false,
+        rooms: false,
+        furniture: false,
+        annotations: false,
+      },
+    })
+    useProjectStore.setState((s) => ({
+      project: {
+        ...s.project,
+        rooms: [],
+        interiorWalls: [],
+        furnitureInstances: [],
+        referenceImages: [],
+        settings: { ...s.project.settings, snapToGrid: false },
+      },
+    }))
+    useHistoryStore.setState({ past: [], future: [] })
+  })
+
+  function dragImage(from: { x: number; y: number }, to: { x: number; y: number }) {
+    SelectTool.onPointerDown(from, from, 10, { shift: false, ctrl: false })
+    SelectTool.onPointerMove(to, 10, { shift: false, ctrl: false })
+    SelectTool.onPointerUp(to, 10, { shift: false, ctrl: false })
+  }
+
+  it('starts a multi drag on an image body instead of only selecting it', () => {
+    useProjectStore.setState((s) => ({
+      project: { ...s.project, referenceImages: [makeReferenceImage()] },
+    }))
+
+    const pt = { x: 10, y: 10 }
+    SelectTool.onPointerDown(pt, pt, 10, { shift: false, ctrl: false })
+
+    const { dragState, interactionMode, selectedIds } = useUIStore.getState()
+    expect(selectedIds).toEqual(['img-1'])
+    expect(interactionMode).toBe('multi')
+    expect(dragState?.kind).toBe('multi')
+    expect(dragState?.kind === 'multi' && dragState.imageIds).toEqual(['img-1'])
+  })
+
+  it('translates the image by the drag delta on pointer-up', () => {
+    useProjectStore.setState((s) => ({
+      project: { ...s.project, referenceImages: [makeReferenceImage()] },
+    }))
+
+    dragImage({ x: 10, y: 10 }, { x: 17, y: 13 })
+
+    const img = useProjectStore.getState().project.referenceImages[0]
+    expect(img.x).toBeCloseTo(7)
+    expect(img.y).toBeCloseTo(3)
+  })
+
+  it('preserves width, height, rotation and calibrated scale across a drag', () => {
+    useProjectStore.setState((s) => ({
+      project: {
+        ...s.project,
+        referenceImages: [
+          makeReferenceImage({
+            rotation: 30,
+            calibration: { p1: { x: 2, y: 2 }, p2: { x: 12, y: 2 }, realWorldDistance: 10 },
+          }),
+        ],
+      },
+    }))
+
+    dragImage({ x: 10, y: 10 }, { x: 15, y: 10 })
+
+    const img = useProjectStore.getState().project.referenceImages[0]
+    expect(img.width).toBe(20)
+    expect(img.height).toBe(20)
+    expect(img.rotation).toBe(30)
+    expect(img.calibration?.realWorldDistance).toBe(10)
+  })
+
+  it('translates the calibration points along with the image', () => {
+    useProjectStore.setState((s) => ({
+      project: {
+        ...s.project,
+        referenceImages: [
+          makeReferenceImage({
+            calibration: { p1: { x: 2, y: 2 }, p2: { x: 12, y: 2 }, realWorldDistance: 10 },
+          }),
+        ],
+      },
+    }))
+
+    dragImage({ x: 10, y: 10 }, { x: 15, y: 14 })
+
+    const calibration = useProjectStore.getState().project.referenceImages[0].calibration
+    expect(calibration?.p1).toEqual({ x: 7, y: 6 })
+    expect(calibration?.p2).toEqual({ x: 17, y: 6 })
+  })
+
+  it('excludes an item-locked or hidden image from the drag even when it is selected', () => {
+    useProjectStore.setState((s) => ({
+      project: {
+        ...s.project,
+        rooms: [makeRoom()],
+        referenceImages: [makeReferenceImage({ id: 'img-locked', locked: true })],
+      },
+    }))
+    useUIStore.getState().setSelection(['room-1', 'img-locked'])
+
+    const pt = { x: 10, y: 10 }
+    SelectTool.onPointerDown(pt, pt, 10, { shift: false, ctrl: false })
+
+    const { dragState } = useUIStore.getState()
+    expect(dragState?.kind === 'multi' && dragState.imageIds).toEqual([])
+  })
+
+  it('drags a selected image and room together, preserving relative positions', () => {
+    useProjectStore.setState((s) => ({
+      project: {
+        ...s.project,
+        rooms: [makeRoom()],
+        referenceImages: [makeReferenceImage({ x: 4, y: 4 })],
+      },
+    }))
+    useUIStore.getState().setSelection(['room-1', 'img-1'])
+
+    dragImage({ x: 10, y: 10 }, { x: 16, y: 12 })
+
+    const { project } = useProjectStore.getState()
+    expect(project.referenceImages[0].x).toBeCloseTo(10)
+    expect(project.referenceImages[0].y).toBeCloseTo(6)
+    expect(project.rooms[0].points[0]).toEqual({ x: 6, y: 2 })
+  })
+
+  it('pushes exactly one history snapshot per image drag', () => {
+    useProjectStore.setState((s) => ({
+      project: { ...s.project, referenceImages: [makeReferenceImage()] },
+    }))
+
+    dragImage({ x: 10, y: 10 }, { x: 15, y: 15 })
+
+    expect(useHistoryStore.getState().past).toHaveLength(1)
+  })
+
+  it('commits nothing and snapshots nothing when the drag does not move', () => {
+    useProjectStore.setState((s) => ({
+      project: { ...s.project, referenceImages: [makeReferenceImage()] },
+    }))
+
+    dragImage({ x: 10, y: 10 }, { x: 10, y: 10 })
+
+    expect(useHistoryStore.getState().past).toHaveLength(0)
+    expect(useProjectStore.getState().project.referenceImages[0].x).toBe(0)
   })
 })

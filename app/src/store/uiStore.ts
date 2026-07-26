@@ -25,8 +25,17 @@ export interface RoomDrawingState {
 export interface CalibrationDrawingState {
   kind: 'calibration'
   imageId: string
-  points: Point[]       // 0, 1, or 2 committed points in world space
+  /** 0, 1, or 2 committed points in world space. 2 means both ends of the
+   * measuring line are placed and the flow is waiting on the real-world
+   * length from CalibrationLengthDialog - the step where no further canvas
+   * clicks are accepted. */
+  points: Point[]
   cursor: Point | null  // current cursor in world space
+  /** Whether this calibration is part of a fresh import or a Recalibrate on
+   * an image that's already placed. Decides what cancelling does: an import
+   * cancel discards the half-imported image, a recalibrate cancel must leave
+   * the existing image completely alone. */
+  origin: 'import' | 'recalibrate'
 }
 
 export interface ImageOriginDrawingState {
@@ -108,8 +117,8 @@ export interface FurnitureRotateDragState {
   currentRotation: number
 }
 
-/** The single rigid-translation drag path for rooms, furniture, and interior
- * walls: dragging any selected room/furniture/interior-wall body moves every
+/** The single rigid-translation drag path for rooms, furniture, interior
+ * walls, and reference images: dragging any selected body moves every
  * selected item of every type together (a lone selected item is just the
  * one-element case), preserving relative positions. Interior walls anchored
  * to a selected room ride along automatically even when not themselves
@@ -127,6 +136,7 @@ export interface MultiDragState {
   roomIds: string[]
   furnitureIds: string[]
   wallIds: string[]
+  imageIds: string[]
   dx: number
   dy: number
 }
@@ -214,10 +224,83 @@ export const TOOL_LABELS: Record<Tool, string> = {
  * in-progress drawingState into account. Purely a read-only helper over
  * existing state — safe to call from any component.
  */
+/** I4 (#23): the reference-image import flow is four steps long and none of
+ * them are self-explanatory - especially calibration, where the user is asked
+ * to click two points without being told those two clicks are what sets the
+ * photo's real-world scale. This table is the single source of truth for that
+ * copy: the status bar (via getToolHint), the on-canvas FlowIndicator, and
+ * CalibrationLengthDialog all render from it, so the wording can't drift
+ * between them. */
+export interface ImageFlowStep {
+  id: 'origin' | 'firstPoint' | 'secondPoint' | 'length'
+  /** 1-based position, for "Step 2 of 4". */
+  index: number
+  total: number
+  label: string
+  /** What to do now, and (for the calibration steps) why. */
+  hint: string
+}
+
+export const IMAGE_FLOW_STEPS: readonly ImageFlowStep[] = [
+  {
+    id: 'origin',
+    index: 1,
+    total: 4,
+    label: 'Place the image',
+    hint: "click where the photo's top-left corner belongs on the plan",
+  },
+  {
+    id: 'firstPoint',
+    index: 2,
+    total: 4,
+    label: 'Set the scale',
+    hint: 'the next two clicks set how big the photo really is: click one end of something whose length you know (a doorway, a wall)',
+  },
+  {
+    id: 'secondPoint',
+    index: 3,
+    total: 4,
+    label: 'Set the scale',
+    hint: 'click the other end of that same feature',
+  },
+  {
+    id: 'length',
+    index: 4,
+    total: 4,
+    label: 'Set the scale',
+    hint: 'enter how long that line is in the real world',
+  },
+]
+
+const IMAGE_FLOW_BY_ID = new Map(IMAGE_FLOW_STEPS.map((s) => [s.id, s]))
+
+/** Which step of the reference-image flow the given drawing state represents,
+ * or null when the flow isn't running. */
+export function getImageFlowStep(drawingState: DrawingState | null): ImageFlowStep | null {
+  if (drawingState?.kind === 'imageOrigin') return IMAGE_FLOW_BY_ID.get('origin') ?? null
+  if (drawingState?.kind === 'calibration') {
+    if (drawingState.points.length === 0) return IMAGE_FLOW_BY_ID.get('firstPoint') ?? null
+    if (drawingState.points.length === 1) return IMAGE_FLOW_BY_ID.get('secondPoint') ?? null
+    return IMAGE_FLOW_BY_ID.get('length') ?? null
+  }
+  return null
+}
+
+/** M2 (#33): extra state the select-tool hint needs to explain why a click
+ * landed on a room rather than the reference image under it. Passed in rather
+ * than read off the store so getToolHint stays a pure function. */
+export interface ToolHintContext {
+  /** Whether the reference-images layer is locked (its default). */
+  imagesLocked: boolean
+  /** Whether the project has any reference images at all. */
+  hasImages: boolean
+}
+
 export function getToolHint(
   activeTool: Tool,
   drawingState: DrawingState | null,
   pendingPlacementName?: string | null,
+  context?: ToolHintContext,
 ): string {
   if (pendingPlacementName) {
     return `Place: click or tap the canvas to place ${pendingPlacementName} (Esc to cancel)`
@@ -227,20 +310,22 @@ export function getToolHint(
       ? 'Room: click to add point'
       : 'Room: click to add point, double-click or click first point to close'
   }
-  if (drawingState?.kind === 'calibration') {
-    return drawingState.points.length === 0
-      ? 'Calibration: click first point'
-      : 'Calibration: click second point'
-  }
-  if (drawingState?.kind === 'imageOrigin') {
-    return 'Image: click to place the top-left corner'
+  // Derived from IMAGE_FLOW_STEPS rather than spelled out again here, so the
+  // status bar always agrees with the on-canvas FlowIndicator.
+  const imageStep = getImageFlowStep(drawingState)
+  if (imageStep) {
+    return `${imageStep.label} (${imageStep.index}/${imageStep.total}): ${imageStep.hint}`
   }
   if (drawingState?.kind === 'interiorWall') {
     return 'Interior Wall: click to place the second point'
   }
   switch (activeTool) {
     case 'select':
-      return 'Select: click to select, drag to marquee-select'
+      // The tip only shows once images are unlocked - that's exactly when a
+      // user starts clicking them and is surprised the room on top wins.
+      return context?.hasImages && !context.imagesLocked
+        ? 'Select: click to select, drag to marquee-select · rooms sit on top: lock the Rooms layer to click a reference image underneath'
+        : 'Select: click to select, drag to marquee-select'
     case 'room':
       return 'Room: click to start drawing'
     case 'interiorWall':

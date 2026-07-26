@@ -16,6 +16,7 @@ import { AnnotationLayer } from './layers/AnnotationLayer'
 import { SelectionLayer } from './layers/SelectionLayer'
 import { Rulers } from './Rulers'
 import { DrawingControls } from './DrawingControls'
+import { FlowIndicator } from './FlowIndicator'
 import { TOOLS } from './tools'
 import type { PointerModifiers } from './tools/SelectTool'
 import type { Point } from '../types/project'
@@ -237,8 +238,6 @@ export function LayoutCanvas() {
         }
         const worldPt = getWorldPoint(e)
         const rawWorldPt = screenToWorld(stageRef.current!.getPointerPosition()!)
-        // TEMP DEBUG (J1 investigation) - remove once the marquee bug is found.
-        console.log('[J1] pointerDown', { activeTool, pointerType: e.evt.pointerType, button: e.evt.button, worldPt })
         TOOLS[activeTool]?.onPointerDown(worldPt, rawWorldPt, livePpu(), getModifiers(e))
         if (e.evt.pointerType === 'touch') touchDispatchedToTool.current = true
       }
@@ -281,15 +280,6 @@ export function LayoutCanvas() {
         return
       }
       const worldPt = getWorldPoint(e)
-      // TEMP DEBUG (J1 investigation) - remove once the marquee bug is found.
-      console.log('[J1] pointerMove', {
-        activeTool,
-        pointerType: e.evt.pointerType,
-        buttons: e.evt.buttons,
-        mode: useUIStore.getState().interactionMode,
-        marquee: useUIStore.getState().marquee,
-        worldPt,
-      })
       TOOLS[activeTool]?.onPointerMove(worldPt, livePpu(), getModifiers(e))
     },
     [activeTool, getWorldPoint, setView],
@@ -436,6 +426,7 @@ export function LayoutCanvas() {
         units={settings.units}
         rulerMode={settings.rulerMode}
       />
+      <FlowIndicator />
       <DrawingControls />
     </div>
   )

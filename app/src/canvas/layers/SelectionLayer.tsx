@@ -20,7 +20,10 @@ function CalibrationPreviewContents({ pixelsPerUnit, units }: Props) {
   const ppu = pixelsPerUnit
 
   const first = points[0]
-  const end = points[0] ? cursor : null
+  // Once both points are committed the line is fixed, not cursor-tracking:
+  // the length dialog is open over it and the user needs to keep seeing what
+  // they measured while they type.
+  const end = points[1] ?? (first ? cursor : null)
   if (!first || !end) return null
 
   const worldDist = distance(first, end)
@@ -45,6 +48,35 @@ function CalibrationPreviewContents({ pixelsPerUnit, units }: Props) {
         listening={false}
       />
     </>
+  )
+}
+
+/** I4 (#23): step 1 of the image flow used to render nothing at all - the
+ * user was asked to "place the top-left corner" with no indication of how big
+ * the thing being placed was. This ghosts the image's footprint at the
+ * prospective position so the placement click is informed. */
+function ImageOriginPreviewContents({ pixelsPerUnit }: Props) {
+  const drawingState = useUIStore((s) => s.drawingState)
+  const referenceImages = useProjectStore((s) => s.project.referenceImages)
+  if (!drawingState || drawingState.kind !== 'imageOrigin') return null
+  const { imageId, cursor } = drawingState
+  if (!cursor) return null
+  const image = referenceImages.find((img) => img.id === imageId)
+  if (!image) return null
+  const ppu = pixelsPerUnit
+
+  return (
+    <Rect
+      x={cursor.x * ppu}
+      y={cursor.y * ppu}
+      width={image.width * ppu}
+      height={image.height * ppu}
+      fill="rgba(255,180,0,0.08)"
+      stroke="#ffb400"
+      strokeWidth={2}
+      dash={[8, 5]}
+      listening={false}
+    />
   )
 }
 
@@ -113,6 +145,15 @@ export function SelectionLayer({ pixelsPerUnit, units }: Props) {
     return (
       <Layer listening={false}>
         <CalibrationPreviewContents pixelsPerUnit={pixelsPerUnit} units={units} />
+        {marqueeRect}
+      </Layer>
+    )
+  }
+
+  if (drawingState?.kind === 'imageOrigin') {
+    return (
+      <Layer listening={false}>
+        <ImageOriginPreviewContents pixelsPerUnit={pixelsPerUnit} units={units} />
         {marqueeRect}
       </Layer>
     )
