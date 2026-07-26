@@ -7,6 +7,7 @@ import { LayerPanel } from './components/LayerPanel'
 import { PropertiesPanel } from './components/PropertiesPanel'
 import { StatusBar } from './components/StatusBar'
 import { SettingsPanel } from './components/SettingsPanel'
+import { CalibrationLengthDialog } from './components/CalibrationLengthDialog'
 import { MobileDrawer } from './components/MobileDrawer'
 import { LayoutCanvas } from './canvas/LayoutCanvas'
 import { useProjectStore } from './store/projectStore'
@@ -91,6 +92,7 @@ export default function App() {
       )}
       <StatusBar />
       {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
+      <CalibrationLengthDialog />
     </div>
   )
 }

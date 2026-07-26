@@ -8,6 +8,7 @@ interface HistoryStore {
   future: Project[]
 
   pushSnapshot: (project: Project) => void
+  popSnapshot: () => void
   undo: (current: Project) => Project | null
   redo: (current: Project) => Project | null
   clear: () => void
@@ -24,6 +25,17 @@ export const useHistoryStore = create<HistoryStore>((set, get) => ({
       past: [...s.past.slice(-MAX_HISTORY + 1), project],
       future: [],
     })),
+
+  // Discards the most recent snapshot without restoring it — for an action
+  // that snapshotted optimistically and then undid its own effect (the image
+  // import flow pushes before adding the image, then deletes the image again
+  // if the user cancels mid-flow). Without this, cancelling would leave an
+  // undo step that appears to do nothing.
+  //
+  // Note pushSnapshot already cleared `future`, so a cancelled action still
+  // costs the redo stack. That matches any other edit and isn't worth
+  // special-casing.
+  popSnapshot: () => set((s) => ({ past: s.past.slice(0, -1) })),
 
   undo: (current) => {
     const { past } = get()

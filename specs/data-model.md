@@ -143,13 +143,20 @@ interface ReferenceImage {
 }
 
 interface ImageCalibration {
-  // Two points in image-local pixel space and the real-world distance between them.
-  // Used to derive the image's world-space dimensions on import.
-  p1: Point                   // pixel coords within source image
-  p2: Point
+  // The two ends of the measuring line the user drew across the photo, and how
+  // long that line is in the real world. Together they set the image's scale.
+  p1: Point                   // WORLD-space, not image-local pixels
+  p2: Point                   // WORLD-space
   realWorldDistance: number    // in project units
 }
 ```
+
+Notes on `ImageCalibration`:
+
+- `p1`/`p2` are **world-space** points in project units, captured when the user drew the calibration line — not coordinates within the source bitmap.
+- After a calibration is applied, `distance(p1, p2) === realWorldDistance`. Every operation that rescales an image maintains that invariant: `calibrationPatch` stores the post-scale `p2`, and a manual resize in the Properties panel scales `p1`, `p2`, and `realWorldDistance` by the same factor.
+- Because they are world-space, they translate with the image when it is dragged (see `SelectTool`'s multi-drag commit).
+- `p1` is the fixed anchor when (re)calibration rescales the image: it is a feature the user deliberately clicked on, so it is the one point that should not move under them.
 
 ---
 

@@ -44,12 +44,12 @@
 ### Reference Images
 
 - [ ] Import a reference image (JPG, PNG, SVG) via file picker or drag-and-drop onto canvas
-- [ ] Reference image renders below all other layers (non-interactive by default)
-- [ ] Scale calibration: user clicks two points on the image and enters the real-world distance between them — the image scales accordingly
-- [ ] Adjust image opacity (slider, 0–100%)
-- [ ] Move/resize/rotate the reference image in a dedicated "image edit" mode
-- [ ] Multiple reference images supported per project
-- [ ] Reference images are embedded in the save file (base64)
+- [x] Reference image renders below all other layers (non-interactive by default — the reference-images layer ships locked)
+- [x] Scale calibration: user clicks two points on the image and enters the real-world distance between them — the image scales accordingly
+- [x] Adjust image opacity (slider, 0–100%) — in the Properties panel
+- [x] Move/resize/rotate the reference image — move by dragging on canvas; resize and rotate from the Properties panel. There is no separate "image edit" mode and no on-canvas transform handles; unlocking the layer is what makes an image editable
+- [x] Multiple reference images supported per project
+- [x] Reference images are embedded in the save file (base64)
 
 ### Layers
 

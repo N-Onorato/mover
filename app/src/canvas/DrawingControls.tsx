@@ -1,4 +1,4 @@
-import { useUIStore } from '../store/uiStore'
+import { useUIStore, getImageFlowStep } from '../store/uiStore'
 import { TOOLS } from './tools'
 import { isCoarsePointer } from '../utils/pointer'
 import styles from './DrawingControls.module.css'
@@ -22,6 +22,13 @@ export function DrawingControls() {
   const isRoom = drawingState.kind === 'room'
   const canFinish = isRoom && drawingState.points.length >= 3
   const canUndoPoint = isRoom && drawingState.points.length > 1
+
+  // I4 (#23): the reference-image flow has its own always-visible Cancel in
+  // FlowIndicator, which renders on touch too - so this cluster would be a
+  // second, redundant Cancel button during that flow. Asked via
+  // getImageFlowStep rather than by listing the flow's drawingState kinds
+  // here, so a change to the flow's steps can't leave this check stale.
+  if (getImageFlowStep(drawingState)) return null
 
   return (
     <div className={styles.controls}>

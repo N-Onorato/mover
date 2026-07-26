@@ -12,11 +12,13 @@ export function StatusBar() {
   const pendingPlacementDefId = useUIStore((s) => s.pendingPlacementDefId)
   const rooms = useProjectStore((s) => s.project.rooms)
   const units = useProjectStore((s) => s.project.settings.units)
+  const imagesLocked = useUIStore((s) => s.lockedLayers.referenceImages)
+  const hasImages = useProjectStore((s) => s.project.referenceImages.length > 0)
 
   const pendingName = pendingPlacementDefId
     ? (findDefinition(pendingPlacementDefId)?.name ?? null)
     : null
-  const hint = getToolHint(activeTool, drawingState, pendingName)
+  const hint = getToolHint(activeTool, drawingState, pendingName, { imagesLocked, hasImages })
   const toolLabel = TOOL_LABELS[activeTool]
 
   const totalArea = useMemo(

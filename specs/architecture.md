@@ -90,6 +90,14 @@ Stage
 
 Each layer maps to a Zustand slice. Canvas items are Konva `Group` or `Shape` nodes driven by the store — no local state in canvas components. When the store updates, the relevant layer re-renders.
 
+### Click priority
+
+Layer order also defines selection priority: **the topmost unlocked, visible layer under the cursor wins a click.** `SelectTool.onPointerDown` therefore hit-tests in the reverse of paint order — furniture, then room vertices/edges, then interior walls, then room bodies, then reference images — returning on the first match.
+
+The case worth calling out is a reference image under a room, which is the normal state of affairs since images are imported to trace rooms over. While the rooms layer is unlocked, clicks in that overlap select the room. This depends only on which layers are unlocked, never on where inside the shape the click lands. Two deterministic ways to reach a covered image: lock the Rooms layer, or marquee-select it (`onPointerUp` unions matches across all entity types rather than taking the first hit, so z-order does not apply).
+
+Reference images ship with their layer locked by default — a tracing photo should not be grabbable while you draw over it.
+
 ---
 
 ## Tool State Machine

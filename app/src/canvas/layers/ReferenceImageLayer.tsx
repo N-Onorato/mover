@@ -13,13 +13,22 @@ interface ImageNodeProps {
 function ReferenceImageNode({ image, pixelsPerUnit }: ImageNodeProps) {
   const htmlImage = useHtmlImage(image.src)
   if (!htmlImage) return null
+  // Positioned by center + offset so Konva rotates about the image's center,
+  // matching what imageCorners()/pointInRotatedRect() assume when hit-testing
+  // and outlining it (and matching FurnitureLayer's convention). Rendering at
+  // the raw top-left instead would rotate about that corner, putting the drawn
+  // image somewhere the click test doesn't expect for any rotation but 0.
+  const w = image.width * pixelsPerUnit
+  const h = image.height * pixelsPerUnit
   return (
     <KonvaImage
       image={htmlImage}
-      x={image.x * pixelsPerUnit}
-      y={image.y * pixelsPerUnit}
-      width={image.width * pixelsPerUnit}
-      height={image.height * pixelsPerUnit}
+      x={(image.x + image.width / 2) * pixelsPerUnit}
+      y={(image.y + image.height / 2) * pixelsPerUnit}
+      width={w}
+      height={h}
+      offsetX={w / 2}
+      offsetY={h / 2}
       rotation={image.rotation}
       opacity={image.opacity}
       listening={false}
