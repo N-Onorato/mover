@@ -14,6 +14,7 @@ export interface Project {
   interiorWalls: InteriorWall[]
   furnitureInstances: FurnitureInstance[]
   customFurnitureDefs: FurnitureDefinition[]
+  furnitureSets: FurnitureSet[]
   referenceImages: ReferenceImage[]
   annotations: Annotation[]
 }
@@ -73,6 +74,20 @@ export interface FurnitureDefinition {
   shape: FurnitureShape
   tags: string[]
   builtIn: boolean
+  /** Saved appearance for user-created pieces. Built-ins leave this unset and
+   * fall back to CATEGORY_COLORS. */
+  fillColor?: string
+  /** Owning furniture set for user-created pieces. Missing or dangling ids
+   * render under "Ungrouped". */
+  setId?: string
+}
+
+/** Named group of user-saved furniture pieces. Set membership lives on the
+ * piece (`FurnitureDefinition.setId`) so definition lookup stays a flat
+ * search; this carries only the set's identity and name. */
+export interface FurnitureSet {
+  id: string
+  name: string
 }
 
 export interface FurnitureInstance {

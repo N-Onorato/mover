@@ -47,15 +47,18 @@ src/
 
   components/
     Toolbar.tsx             # Tool switcher, zoom controls
-    CatalogPanel.tsx        # Furniture browser + search
+    CatalogPanel.tsx        # Furniture browser + search (Catalog / Sets tabs)
+    SetsTab.tsx             # Saved-piece tree: sets, rename/delete flows
+    PlaceableItem.tsx       # One draggable/armable row, shared by both tabs
+    SaveToSetDialog.tsx     # Save the selected item as a piece in a set
     LayerPanel.tsx          # Layer visibility/lock toggles
     PropertiesPanel.tsx     # Selected item properties (dimensions, rotation, color)
     SettingsModal.tsx
 
   furniture/
-    catalog.ts              # Built-in furniture definitions (JSON)
-    types.ts                # FurnitureDefinition type
-    CustomFurnitureForm.tsx # Create/edit custom furniture
+    catalog.ts              # Built-in definitions, defaults, reset patch
+    library.ts              # User sets/pieces: CRUD, merge, (de)serialize
+    resolve.ts              # Definition lookup across catalog + saved pieces
 
   io/
     save.ts                 # Serialize project to JSON

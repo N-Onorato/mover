@@ -11,9 +11,11 @@ import { CalibrationLengthDialog } from './components/CalibrationLengthDialog'
 import { MobileDrawer } from './components/MobileDrawer'
 import { LayoutCanvas } from './canvas/LayoutCanvas'
 import { useProjectStore } from './store/projectStore'
+import { useLibraryStore } from './store/libraryStore'
 import { useMediaQuery } from './hooks/useMediaQuery'
 import { loadFromLocalStorage } from './io/load'
 import { saveToLocalStorage } from './io/save'
+import { embedLibrary } from './furniture/library'
 import styles from './App.module.css'
 import resizeStyles from './components/ResizeHandle.module.css'
 
@@ -28,15 +30,26 @@ export default function App() {
   const isNarrow = useMediaQuery('(max-width: 768px)')
 
   useEffect(() => {
+    // Library first: it is the source of truth on id collisions, so it has to
+    // be in place before a restored project's own copy is merged in.
+    useLibraryStore.getState().hydrate()
     const restored = loadFromLocalStorage()
-    if (restored) useProjectStore.getState().setProject(restored)
+    if (restored) {
+      useProjectStore.getState().setProject(restored)
+      useLibraryStore.getState().mergeFromProject(restored)
+    }
   }, [])
 
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => {
     return useProjectStore.subscribe((state) => {
       if (timeoutRef.current) clearTimeout(timeoutRef.current)
-      timeoutRef.current = setTimeout(() => saveToLocalStorage(state.project), AUTOSAVE_DEBOUNCE_MS)
+      timeoutRef.current = setTimeout(
+        // The library is embedded at the save boundary rather than kept in
+        // the project, so editing sets never marks the project dirty.
+        () => saveToLocalStorage(embedLibrary(state.project, useLibraryStore.getState().library)),
+        AUTOSAVE_DEBOUNCE_MS,
+      )
     })
   }, [])
 

@@ -32,14 +32,15 @@
 - [ ] Furniture snaps to grid and optionally to walls
 - [ ] Copy/paste furniture (Ctrl+C / Ctrl+V)
 - [ ] Furniture can be locked to prevent accidental movement
+- [x] Reset a placed item to its definition's size, color and label (position and rotation are kept)
 
 ### Furniture Definitions
 
 - [ ] Each furniture piece has: name, category, width, depth (real-world), shape (SVG path or rectangle)
-- [ ] Users can create custom furniture definitions via a form (name, dimensions, simple shape)
+- [x] Users can create custom furniture definitions by saving a placed item as a piece (name, dimensions, color) into a named set
 - [ ] Import a furniture definition from a JSON file
 - [ ] Export a custom definition to JSON for sharing
-- [ ] Custom furniture persists in the project file
+- [x] Custom furniture persists in the project file, and in the browser library shared across projects
 
 ### Reference Images
 

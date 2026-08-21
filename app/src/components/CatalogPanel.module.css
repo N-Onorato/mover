@@ -37,10 +37,18 @@
 }
 
 .item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   padding: 7px 12px;
   cursor: grab;
   border-radius: 4px;
   margin: 0 4px;
+}
+
+.itemText {
+  flex: 1;
+  min-width: 0;
 }
 
 .item:hover {
@@ -72,4 +80,168 @@
   font-size: 11px;
   color: #666;
   margin-top: 1px;
+}
+
+/* Tab strip. Same active-button language as the toolbar, so the two read as
+ * one system rather than two conventions. */
+.tabs {
+  display: flex;
+  gap: 4px;
+  padding: 6px 8px 0;
+}
+
+.tab {
+  flex: 1;
+  padding: 5px 10px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: #ccc;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.tab:hover {
+  background: #333;
+  color: #fff;
+}
+
+.tab.active {
+  background: #2d5be3;
+  border-color: #2d5be3;
+  color: #fff;
+}
+
+.setsHeader {
+  padding: 0 8px 4px;
+}
+
+.newSetBtn {
+  width: 100%;
+  min-height: 28px;
+  padding: 4px 10px;
+  background: #1a1a1a;
+  border: 1px solid #444;
+  border-radius: 4px;
+  color: #ccc;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.newSetBtn:hover {
+  border-color: #2d5be3;
+  color: #eee;
+}
+
+.group {
+  margin-bottom: 6px;
+}
+
+.groupHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  margin: 0 4px;
+  border-radius: 4px;
+  cursor: pointer;
+  color: #bbb;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.groupHeader:hover {
+  background: #2e2e2e;
+}
+
+.groupCaret {
+  width: 10px;
+  color: #777;
+}
+
+.groupName {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.groupCount {
+  color: #666;
+  font-weight: 400;
+}
+
+/* Controls stay out of the way until the row is touched, so the tree reads as
+ * a list of things to place rather than a list of controls. */
+.itemActions {
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+}
+
+.groupHeader:hover .itemActions,
+.item:hover .itemActions,
+.itemActions:focus-within {
+  opacity: 1;
+}
+
+.iconBtn {
+  width: 20px;
+  height: 20px;
+  background: transparent;
+  border: none;
+  color: #888;
+  cursor: pointer;
+  font-size: 11px;
+  border-radius: 3px;
+  padding: 0;
+}
+
+.iconBtn:hover {
+  background: #444;
+  color: #eee;
+}
+
+.empty {
+  padding: 10px 12px;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #777;
+}
+
+.emptyGroup {
+  padding: 2px 12px 6px 26px;
+  margin: 0;
+  font-size: 11px;
+  color: #666;
+}
+
+.warning {
+  margin: 0 8px 6px;
+  padding: 6px 8px;
+  border: 1px solid #6b3f3c;
+  border-radius: 4px;
+  background: #2c1f1f;
+  font-size: 11px;
+  line-height: 1.4;
+  color: #d79b96;
+}
+
+/* Touch devices: bigger tap targets without disturbing desktop density.
+ * Row controls can't rely on hover there, so they're always visible. */
+@media (pointer: coarse) {
+  .tab {
+    padding: 8px 10px;
+  }
+
+  .iconBtn {
+    width: 32px;
+    height: 32px;
+    font-size: 13px;
+  }
+
+  .itemActions {
+    opacity: 1;
+  }
 }

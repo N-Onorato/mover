@@ -90,3 +90,65 @@
   color: #e35d5d;
   margin-bottom: 10px;
 }
+
+/* Dialog action rows. Shared here so every dialog's primary/secondary/danger
+ * buttons stay identical instead of being re-declared per module. */
+
+.actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.button {
+  flex: 1;
+  min-height: 32px;
+  padding: 6px 10px;
+  background: #2d5be3;
+  border: 1px solid #2d5be3;
+  border-radius: 4px;
+  color: #fff;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.button:hover:not(:disabled) {
+  background: #3a68ea;
+}
+
+.button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.secondaryButton {
+  flex: 1;
+  min-height: 32px;
+  padding: 6px 10px;
+  background: #1a1a1a;
+  border: 1px solid #444;
+  border-radius: 4px;
+  color: #ccc;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.secondaryButton:hover {
+  border-color: #666;
+  color: #eee;
+}
+
+.dangerButton {
+  composes: button;
+  background: #b3453f;
+  border-color: #b3453f;
+}
+
+.dangerButton:hover:not(:disabled) {
+  background: #c85049;
+}
+
+.select {
+  composes: input;
+  cursor: pointer;
+}
