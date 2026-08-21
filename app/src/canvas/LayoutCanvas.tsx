@@ -5,7 +5,8 @@ import { Stage } from 'react-konva'
 import { useProjectStore } from '../store/projectStore'
 import { useUIStore } from '../store/uiStore'
 import { useHistoryStore } from '../store/historyStore'
-import { findDefinition, createFurnitureInstance } from '../furniture/catalog'
+import { createFurnitureInstance } from '../furniture/catalog'
+import { resolveDefinition } from '../furniture/resolve'
 import { GridLayer } from './layers/GridLayer'
 import { ReferenceImageLayer } from './layers/ReferenceImageLayer'
 import { RoomLayer } from './layers/RoomLayer'
@@ -175,7 +176,7 @@ export function LayoutCanvas() {
   /** Shared placement path for catalog drag-drop and tap-to-place: snapshot
    * for undo, create the instance at worldPt, select it. */
   const placeFurnitureAt = useCallback((defId: string, worldPt: Point) => {
-    const def = findDefinition(defId)
+    const def = resolveDefinition(defId)
     if (!def) return
     useHistoryStore.getState().pushSnapshot(useProjectStore.getState().project)
     const instance = createFurnitureInstance(def, worldPt)

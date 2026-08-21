@@ -59,18 +59,68 @@ export const CATEGORY_COLORS: Record<FurnitureCategory, string> = {
 // Floor for furniture width/depth during resize, in world units (inches-equivalent).
 export const MIN_FURNITURE_SIZE = 2
 
+/** A user-saved piece carries the color it was saved with; built-ins fall
+ * back to their category color. */
+export function defaultFillColor(def: FurnitureDefinition): string {
+  return def.fillColor ?? CATEGORY_COLORS[def.category]
+}
+
+/** The fields a definition dictates about an instance. Both placement and
+ * reset derive from this one function, so "Reset to default" is guaranteed to
+ * reproduce a freshly placed item rather than approximate it. */
+export interface FurnitureDefaults {
+  width: number
+  depth: number
+  fillColor: string
+  label: string
+}
+
+export function definitionDefaults(def: FurnitureDefinition): FurnitureDefaults {
+  return {
+    width: def.width,
+    depth: def.depth,
+    fillColor: defaultFillColor(def),
+    label: def.name,
+  }
+}
+
+/** The patch that restores an instance to its definition's defaults.
+ * Position and rotation are deliberately absent: resetting is about the piece
+ * itself, not about where the user put it or which way they turned it. */
+export function resetPatch(def: FurnitureDefinition): Partial<FurnitureInstance> {
+  return definitionDefaults(def)
+}
+
+/** Sizes reach an instance through parseLength (`7'3"` -> 87) and through
+ * resize drags, so exact float equality would leave the reset control
+ * stubbornly enabled on a visually identical item. */
+function nearlyEqual(a: number, b: number): boolean {
+  return Math.abs(a - b) < 1e-6
+}
+
+/** True when everything `resetPatch` would write already matches - used to
+ * disable the reset control rather than offer a no-op undo entry. */
+export function matchesDefault(instance: FurnitureInstance, def: FurnitureDefinition): boolean {
+  const defaults = definitionDefaults(def)
+  return (
+    nearlyEqual(instance.width, defaults.width) &&
+    nearlyEqual(instance.depth, defaults.depth) &&
+    // <input type="color"> emits lowercase hex; CATEGORY_COLORS is hand-written.
+    instance.fillColor.toLowerCase() === defaults.fillColor.toLowerCase() &&
+    instance.label === defaults.label
+  )
+}
+
 export function createFurnitureInstance(def: FurnitureDefinition, center: Point): FurnitureInstance {
+  const defaults = definitionDefaults(def)
   return {
     id: crypto.randomUUID(),
     definitionId: def.id,
-    x: center.x - def.width / 2,
-    y: center.y - def.depth / 2,
-    width: def.width,
-    depth: def.depth,
+    x: center.x - defaults.width / 2,
+    y: center.y - defaults.depth / 2,
     rotation: 0,
-    fillColor: CATEGORY_COLORS[def.category],
-    label: def.name,
     locked: false,
     visible: true,
+    ...defaults,
   }
 }

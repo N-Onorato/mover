@@ -46,6 +46,7 @@ export function parseProject(json: string): Project {
   if (!Array.isArray(p.interiorWalls)) p.interiorWalls = []
   if (!Array.isArray(p.furnitureInstances)) p.furnitureInstances = []
   if (!Array.isArray(p.customFurnitureDefs)) p.customFurnitureDefs = []
+  if (!Array.isArray(p.furnitureSets)) p.furnitureSets = []
   return data as Project
 }
 

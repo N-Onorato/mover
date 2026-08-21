@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { useProjectStore } from './projectStore'
+import { findDefinition, resetPatch } from '../furniture/catalog'
 import type { FurnitureInstance, InteriorWall, Room } from '../types/project'
 
 function makeRoom(patch: Partial<Room> = {}): Room {
@@ -75,5 +76,20 @@ describe('removeEntities (#27 delete on a mixed multi-selection)', () => {
     expect(project.rooms.map((r) => r.id)).toEqual(['room-2'])
     expect(project.furnitureInstances).toEqual([])
     expect(project.interiorWalls).toEqual([])
+  })
+})
+
+describe('reset to definition defaults', () => {
+  it('leaves position and rotation untouched', () => {
+    const instance = makeFurniture({ x: 40, y: 60, rotation: 45, width: 70, label: 'zzz' })
+    useProjectStore.setState((state) => ({
+      project: { ...state.project, furnitureInstances: [instance] },
+    }))
+
+    const def = findDefinition('sofa-3')!
+    useProjectStore.getState().updateFurniture(instance.id, resetPatch(def))
+
+    const updated = useProjectStore.getState().project.furnitureInstances[0]
+    expect(updated).toMatchObject({ x: 40, y: 60, rotation: 45, width: def.width, label: def.name })
   })
 })

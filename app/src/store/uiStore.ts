@@ -162,6 +162,8 @@ export type InteractionMode =
   | 'furnitureRotate'
   | 'multi'
 
+export type CatalogTab = 'catalog' | 'sets'
+
 interface UIStore {
   activeTool: Tool
   selectedIds: string[]
@@ -177,6 +179,12 @@ interface UIStore {
    * touch-friendly alternative to HTML5 drag-and-drop (which never fires on
    * touchscreens). */
   pendingPlacementDefId: string | null
+  /** Which tab the catalog panel shows. Kept here rather than in the panel
+   * because the mobile drawer unmounts CatalogPanel every time it closes, and
+   * because saving a piece switches the panel to Sets so the user sees where
+   * it landed. Deliberately not reset by setActiveTool - picking the room
+   * tool shouldn't flip the catalog back. */
+  catalogTab: CatalogTab
   showWallLabels: boolean
   showLayers: {
     referenceImages: boolean
@@ -204,6 +212,7 @@ interface UIStore {
   setInteractionMode: (mode: InteractionMode) => void
   setDragAnchorWorld: (pt: Point | null) => void
   setPendingPlacement: (defId: string | null) => void
+  setCatalogTab: (tab: CatalogTab) => void
   toggleWallLabels: () => void
   toggleLayerVisibility: (layer: keyof UIStore['showLayers']) => void
   toggleLayerLock: (layer: keyof UIStore['lockedLayers']) => void
@@ -350,6 +359,7 @@ export const useUIStore = create<UIStore>((set) => ({
   interactionMode: 'idle',
   dragAnchorWorld: null,
   pendingPlacementDefId: null,
+  catalogTab: 'catalog',
   showWallLabels: true,
   showLayers: {
     referenceImages: true,
@@ -388,6 +398,7 @@ export const useUIStore = create<UIStore>((set) => ({
   setInteractionMode: (mode) => set({ interactionMode: mode }),
   setDragAnchorWorld: (pt) => set({ dragAnchorWorld: pt }),
   setPendingPlacement: (defId) => set({ pendingPlacementDefId: defId }),
+  setCatalogTab: (tab) => set({ catalogTab: tab }),
   toggleWallLabels: () => set((s) => ({ showWallLabels: !s.showWallLabels })),
   toggleLayerVisibility: (layer) =>
     set((s) => ({

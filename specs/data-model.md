@@ -17,7 +17,8 @@ interface Project {
   settings: ProjectSettings
   rooms: Room[]
   furnitureInstances: FurnitureInstance[]
-  customFurnitureDefs: FurnitureDefinition[]
+  customFurnitureDefs: FurnitureDefinition[]  // the user's saved pieces (see Furniture sets)
+  furnitureSets: FurnitureSet[]               // the sets those pieces are filed under
   referenceImages: ReferenceImage[]
   annotations: Annotation[]
 }
@@ -192,7 +193,33 @@ interface DimensionLine {
 
 ## Catalog (built-in)
 
-The built-in catalog is a static JSON file (`src/furniture/catalog.json`) that ships with the app. It is never stored in the project file — only `customFurnitureDefs` (user-created) are persisted. Instances reference definitions by `definitionId`; if the ID is not found in the built-in catalog, it falls back to `customFurnitureDefs`.
+The built-in catalog is a static JSON file (`src/furniture/catalog.json`) that ships with the app. It is never stored in the project file — only `customFurnitureDefs` (user-created) are persisted. Instances reference definitions by `definitionId`; if the ID is not found in the built-in catalog, it falls back to `customFurnitureDefs`. Built-ins always win a collision, so a saved piece can never shadow a catalog entry.
+
+---
+
+## Furniture sets (user library)
+
+A **piece** is a `FurnitureDefinition` the user saved from a placed item, capturing its width, depth, `fillColor` and name. A **set** is the named group a piece is filed under:
+
+```ts
+interface FurnitureSet {
+  id: string
+  name: string
+}
+```
+
+Membership lives on the piece rather than nesting pieces inside sets, which keeps definition lookup a single flat search over `customFurnitureDefs`. A piece whose `setId` is missing or names no known set shows under "Ungrouped".
+
+`FurnitureDefinition` gains two optional fields, both unset on built-ins:
+
+| Field | Meaning |
+|-------|---------|
+| `fillColor?` | Color captured from the source instance; built-ins fall back to `CATEGORY_COLORS[category]` |
+| `setId?` | Owning set |
+
+**Storage is dual.** The library lives in `localStorage` under `mover:furniture-library` (`{ version, sets, pieces }`), shared by every project in the browser, and a copy is embedded in each saved project file so a shared `.mover.json` renders its own pieces. Opening a project merges its copy into the browser library by id, with the browser library winning every collision — so re-opening a file can never duplicate a set. The embed is written at serialization time only, so editing the library never marks the project dirty and never pushes a history snapshot.
+
+**The library is outside undo.** `historyStore` snapshots whole `Project` objects, which the library is not part of; deleting a set or a piece confirms instead of being undoable.
 
 ### Initial catalog pieces (v1)
 

@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useProjectStore } from '../store/projectStore'
+import { useLibraryStore } from '../store/libraryStore'
 import { useUIStore, DEFAULT_VIEW } from '../store/uiStore'
 import { useHistoryStore } from '../store/historyStore'
 import { downloadProject } from '../io/save'
 import { openProjectFile, LoadError } from '../io/load'
+import { embedLibrary } from '../furniture/library'
 import { exportStageToPng } from '../io/exportPng'
 import { getStage } from '../canvas/stageRegistry'
 import { startImageImport } from '../canvas/tools/ImageTool'
@@ -25,6 +27,9 @@ function handleOpen() {
   openProjectFile()
     .then((project) => {
       useProjectStore.getState().setProject(project)
+      // Pieces saved inside the file join this browser's library; entries it
+      // already has win, so re-opening a file can't duplicate a set.
+      useLibraryStore.getState().mergeFromProject(project)
       useHistoryStore.getState().clear()
     })
     .catch((e) => {
@@ -34,7 +39,9 @@ function handleOpen() {
 
 function handleSave() {
   const { project } = useProjectStore.getState()
-  downloadProject(project)
+  // The saved file carries a copy of the furniture library so the sets travel
+  // with it; see furniture/library.ts.
+  downloadProject(embedLibrary(project, useLibraryStore.getState().library))
   useProjectStore.getState().markSaved()
 }
 

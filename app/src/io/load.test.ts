@@ -58,6 +58,32 @@ describe('parseProject', () => {
     expect(project.interiorWalls).toEqual([])
   })
 
+  it('backfills furnitureSets when missing (projects saved before sets existed)', () => {
+    const project = parseProject(JSON.stringify(baseProject()))
+    expect(project.furnitureSets).toEqual([])
+  })
+
+  it('round-trips saved sets and pieces untouched', () => {
+    const set = { id: 'set-1', name: 'My Apartment' }
+    const piece = {
+      id: 'piece-1',
+      name: 'Sectional',
+      category: 'other',
+      width: 108,
+      depth: 40,
+      shape: { type: 'rect' },
+      tags: [],
+      builtIn: false,
+      fillColor: '#123456',
+      setId: 'set-1',
+    }
+    const project = parseProject(
+      JSON.stringify({ ...baseProject(), furnitureSets: [set], customFurnitureDefs: [piece] }),
+    )
+    expect(project.furnitureSets).toEqual([set])
+    expect(project.customFurnitureDefs).toEqual([piece])
+  })
+
   it('round-trips existing interiorWalls untouched', () => {
     const wall = {
       id: 'w1',

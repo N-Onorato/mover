@@ -40,6 +40,7 @@ function newProject(): Project {
     interiorWalls: [],
     furnitureInstances: [],
     customFurnitureDefs: [],
+    furnitureSets: [],
     referenceImages: [],
     annotations: [],
   }

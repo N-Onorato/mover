@@ -4,7 +4,15 @@ import { useProjectStore } from '../store/projectStore'
 import { useHistoryStore } from '../store/historyStore'
 import { distance, polygonBoundingBox } from '../utils/geometry'
 import { formatLength, parseLength } from '../utils/units'
-import { MIN_FURNITURE_SIZE } from '../furniture/catalog'
+import {
+  MIN_FURNITURE_SIZE,
+  findDefinition,
+  matchesDefault,
+  resetPatch,
+} from '../furniture/catalog'
+import { findPiece } from '../furniture/resolve'
+import { useLibraryStore } from '../store/libraryStore'
+import { SaveToSetDialog } from './SaveToSetDialog'
 import type { Room, InteriorWall, FurnitureInstance, ReferenceImage } from '../types/project'
 import { resizeImagePatch, startRecalibration } from '../canvas/tools/ImageTool'
 import styles from './PropertiesPanel.module.css'
@@ -204,6 +212,13 @@ function FurnitureProperties({ instance }: { instance: FurnitureInstance }) {
   const units = useProjectStore((s) => s.project.settings.units)
   const updateFurniture = useProjectStore((s) => s.updateFurniture)
   const colorSnapshot = useSnapshotOnce()
+  const [saveOpen, setSaveOpen] = useState(false)
+  // Subscribed rather than resolved through resolveDefinition's getState, so
+  // saving or deleting the piece this item came from re-renders the buttons.
+  const pieces = useLibraryStore((s) => s.library.pieces)
+  const definition =
+    findDefinition(instance.definitionId) ?? findPiece(pieces, instance.definitionId)
+  const isDefault = definition ? matchesDefault(instance, definition) : true
 
   function commitLabel(raw: string) {
     updateFurniture(instance.id, { label: raw.trim() === '' ? null : raw })
@@ -229,6 +244,12 @@ function FurnitureProperties({ instance }: { instance: FurnitureInstance }) {
     if (rotation === null) return false
     updateFurniture(instance.id, { rotation })
     return true
+  }
+
+  function handleReset() {
+    if (!definition) return
+    useHistoryStore.getState().pushSnapshot(useProjectStore.getState().project)
+    updateFurniture(instance.id, resetPatch(definition))
   }
 
   return (
@@ -257,6 +278,23 @@ function FurnitureProperties({ instance }: { instance: FurnitureInstance }) {
           onBlur={colorSnapshot.release}
         />
       </label>
+      <button className={styles.button} onClick={handleReset} disabled={!definition || isDefault}>
+        Reset to default
+      </button>
+      <div className={styles.hint}>
+        {!definition
+          ? 'This item came from a saved piece that no longer exists, so there are no defaults to restore.'
+          : isDefault
+            ? `Already matches ${definition.name}.`
+            : `Restores the size, color and label of ${definition.name}. Position and rotation stay put.`}
+      </div>
+      <button className={styles.button} onClick={() => setSaveOpen(true)}>
+        Save to set…
+      </button>
+      <div className={styles.hint}>
+        Keeps this item&rsquo;s size and color as a reusable piece in the catalog&rsquo;s Sets tab.
+      </div>
+      {saveOpen && <SaveToSetDialog instance={instance} onClose={() => setSaveOpen(false)} />}
     </div>
   )
 }

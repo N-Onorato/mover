@@ -2,6 +2,8 @@ import { useMemo } from 'react'
 import { useProjectStore } from '../store/projectStore'
 import { useUIStore, TOOL_LABELS, getToolHint } from '../store/uiStore'
 import { findDefinition } from '../furniture/catalog'
+import { findPiece } from '../furniture/resolve'
+import { useLibraryStore } from '../store/libraryStore'
 import { polygonArea } from '../utils/geometry'
 import { formatArea } from '../utils/units'
 import styles from './StatusBar.module.css'
@@ -15,8 +17,12 @@ export function StatusBar() {
   const imagesLocked = useUIStore((s) => s.lockedLayers.referenceImages)
   const hasImages = useProjectStore((s) => s.project.referenceImages.length > 0)
 
+  // Subscribed rather than resolved imperatively: an armed piece that is
+  // renamed or deleted has to re-render this hint.
+  const pieces = useLibraryStore((s) => s.library.pieces)
   const pendingName = pendingPlacementDefId
-    ? (findDefinition(pendingPlacementDefId)?.name ?? null)
+    ? ((findDefinition(pendingPlacementDefId) ?? findPiece(pieces, pendingPlacementDefId))?.name ??
+      null)
     : null
   const hint = getToolHint(activeTool, drawingState, pendingName, { imagesLocked, hasImages })
   const toolLabel = TOOL_LABELS[activeTool]
