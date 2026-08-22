@@ -26,12 +26,18 @@ src/
   App.tsx                   # Root layout: sidebar + canvas area + toolbar
 
   store/
-    projectStore.ts         # Zustand store: rooms, furniture, images, history
-    uiStore.ts              # Active tool, selection, panel visibility
+    projectStore.ts         # Zustand store: rooms, furniture layouts, images
+    uiStore.ts              # Active tool, selection, panel visibility, compare mode
     historyStore.ts         # Undo/redo stack
 
+  project/
+    layouts.ts              # Pure helpers over furnitureLayouts (active layout, duplication)
+    layoutActions.ts        # Layout commands: switch/create/duplicate/rename/delete
+
   canvas/
-    LayoutCanvas.tsx        # Konva Stage + Layer composition
+    LayoutWorkspace.tsx     # Layout tabs + either the canvas or the comparison panes
+    LayoutCanvas.tsx        # Konva Stage + Layer composition (the one editable canvas)
+    ComparisonPane.tsx      # Read-only Stage for one non-active layout
     layers/
       ReferenceImageLayer.tsx
       RoomLayer.tsx
@@ -51,6 +57,7 @@ src/
     SetsTab.tsx             # Saved-piece tree: sets, rename/delete flows
     PlaceableItem.tsx       # One draggable/armable row, shared by both tabs
     SaveToSetDialog.tsx     # Save the selected item as a piece in a set
+    LayoutTabs.tsx          # Furniture-layout tab strip + Compare toggle
     LayerPanel.tsx          # Layer visibility/lock toggles
     PropertiesPanel.tsx     # Selected item properties (dimensions, rotation, color)
     SettingsModal.tsx

@@ -9,7 +9,7 @@ import { StatusBar } from './components/StatusBar'
 import { SettingsPanel } from './components/SettingsPanel'
 import { CalibrationLengthDialog } from './components/CalibrationLengthDialog'
 import { MobileDrawer } from './components/MobileDrawer'
-import { LayoutCanvas } from './canvas/LayoutCanvas'
+import { LayoutWorkspace } from './canvas/LayoutWorkspace'
 import { useProjectStore } from './store/projectStore'
 import { useLibraryStore } from './store/libraryStore'
 import { useMediaQuery } from './hooks/useMediaQuery'
@@ -65,7 +65,7 @@ export default function App() {
       />
       {isNarrow ? (
         <div className={styles.workspace}>
-          <LayoutCanvas />
+          <LayoutWorkspace />
         </div>
       ) : (
         <div className={styles.workspace}>
@@ -75,7 +75,7 @@ export default function App() {
             </Panel>
             <Separator className={resizeStyles.handle} />
             <Panel id="canvas" minSize="30%">
-              <LayoutCanvas />
+              <LayoutWorkspace />
             </Panel>
             <Separator className={resizeStyles.handle} />
             <Panel id="sidebar" defaultSize="22%" minSize="14%">

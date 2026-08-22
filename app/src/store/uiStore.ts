@@ -185,6 +185,15 @@ interface UIStore {
    * it landed. Deliberately not reset by setActiveTool - picking the room
    * tool shouldn't flip the catalog back. */
   catalogTab: CatalogTab
+  /** L1 (#28): whether the canvas column shows one layout or several side by
+   * side. Lives here, not in the project, because it's how you're looking at
+   * the plan rather than part of it - it isn't saved and doesn't travel with
+   * a shared `.mover.json`. */
+  compareMode: boolean
+  /** Layout ids included in the side-by-side view. The active layout is
+   * always rendered whether or not it's listed (it's the one being edited),
+   * and ids of deleted layouts are dropped as they go. */
+  comparedLayoutIds: string[]
   showWallLabels: boolean
   showLayers: {
     referenceImages: boolean
@@ -213,6 +222,11 @@ interface UIStore {
   setDragAnchorWorld: (pt: Point | null) => void
   setPendingPlacement: (defId: string | null) => void
   setCatalogTab: (tab: CatalogTab) => void
+  /** Enters compare mode showing exactly `layoutIds` (plus the active one). */
+  openComparison: (layoutIds: string[]) => void
+  closeComparison: () => void
+  toggleComparedLayout: (id: string) => void
+  removeComparedLayout: (id: string) => void
   toggleWallLabels: () => void
   toggleLayerVisibility: (layer: keyof UIStore['showLayers']) => void
   toggleLayerLock: (layer: keyof UIStore['lockedLayers']) => void
@@ -360,6 +374,8 @@ export const useUIStore = create<UIStore>((set) => ({
   dragAnchorWorld: null,
   pendingPlacementDefId: null,
   catalogTab: 'catalog',
+  compareMode: false,
+  comparedLayoutIds: [],
   showWallLabels: true,
   showLayers: {
     referenceImages: true,
@@ -399,6 +415,16 @@ export const useUIStore = create<UIStore>((set) => ({
   setDragAnchorWorld: (pt) => set({ dragAnchorWorld: pt }),
   setPendingPlacement: (defId) => set({ pendingPlacementDefId: defId }),
   setCatalogTab: (tab) => set({ catalogTab: tab }),
+  openComparison: (layoutIds) => set({ compareMode: true, comparedLayoutIds: layoutIds }),
+  closeComparison: () => set({ compareMode: false }),
+  toggleComparedLayout: (id) =>
+    set((s) => ({
+      comparedLayoutIds: s.comparedLayoutIds.includes(id)
+        ? s.comparedLayoutIds.filter((x) => x !== id)
+        : [...s.comparedLayoutIds, id],
+    })),
+  removeComparedLayout: (id) =>
+    set((s) => ({ comparedLayoutIds: s.comparedLayoutIds.filter((x) => x !== id) })),
   toggleWallLabels: () => set((s) => ({ showWallLabels: !s.showWallLabels })),
   toggleLayerVisibility: (layer) =>
     set((s) => ({

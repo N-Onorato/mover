@@ -23,11 +23,10 @@ import type { PointerModifiers } from './tools/SelectTool'
 import type { Point } from '../types/project'
 import { snapToGrid } from '../utils/snap'
 import { adaptiveGridSize } from '../utils/snap'
+import { BASE_PIXELS_PER_UNIT } from '../utils/scale'
 import { distance, midpoint } from '../utils/geometry'
 import { setStage } from './stageRegistry'
 import styles from './LayoutCanvas.module.css'
-
-const BASE_PIXELS_PER_UNIT = 10
 
 export function LayoutCanvas() {
   const containerRef = useRef<HTMLDivElement>(null)

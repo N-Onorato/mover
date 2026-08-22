@@ -8,7 +8,7 @@ All types are TypeScript. All dimensions are in **real-world units** (inches or 
 
 ```ts
 interface Project {
-  version: string              // file format version, e.g. "1.0"
+  version: string              // file format version, currently "1.1"
   id: string                   // uuid
   name: string
   created: string              // ISO 8601
@@ -16,7 +16,9 @@ interface Project {
 
   settings: ProjectSettings
   rooms: Room[]
-  furnitureInstances: FurnitureInstance[]
+  interiorWalls: InteriorWall[]
+  furnitureLayouts: FurnitureLayout[]         // furniture arrangements (see Furniture layouts)
+  activeFurnitureLayoutId: string             // the layout the tools edit
   customFurnitureDefs: FurnitureDefinition[]  // the user's saved pieces (see Furniture sets)
   furnitureSets: FurnitureSet[]               // the sets those pieces are filed under
   referenceImages: ReferenceImage[]
@@ -234,6 +236,45 @@ Membership lives on the piece rather than nesting pieces inside sets, which keep
 
 ---
 
+## Furniture layouts (variants)
+
+A **furniture layout** is one named arrangement of furniture over the project's rooms — a variant of the plan the user can compare against the others.
+
+```ts
+interface FurnitureLayout {
+  id: string
+  name: string
+  furnitureInstances: FurnitureInstance[]
+}
+```
+
+**Only furniture is per-layout.** Rooms, interior walls, reference images and annotations stay on the `Project` and are shared by every layout, because the feature exists to try different arrangements *of the same space*: a variant that could also move the walls would be a separate project, not a comparable alternative.
+
+**A project always has at least one layout.** `projectStore.removeFurnitureLayout` refuses to delete the last one, and the loader backfills one for any file that arrives without them, so there is always somewhere to place furniture.
+
+`activeFurnitureLayoutId` names the layout the tools read and write. Every furniture read in the app goes through `project/layouts.ts` (`activeFurnitureInstances`, or `layoutFurniture` for a read-only comparison pane) rather than reaching into the project, so "which layout am I looking at" is decided in one place. An id naming no layout falls back to the first one, and the loader normalizes it on open.
+
+**Instance ids are unique across layouts.** Duplicating a layout re-ids every instance it copies: entity ids are the currency of selection and deletion, so two layouts sharing an instance id would let a delete in one silently hit the other.
+
+**Selection is effectively per-layout.** `uiStore.selectedIds` holds entity ids and is cleared whenever the active layout changes (`project/layoutActions.ts`), so the properties panel, the highlight layer and Delete only ever act on what is on screen. Undo/redo clear it for the same reason — a restored snapshot may carry a different active layout.
+
+Creating, duplicating, renaming and deleting a layout push a history snapshot and are undoable. *Switching* layouts does not: it is navigation, and an undo step there would sit between the user and the edit they actually want to take back.
+
+### Comparison view
+
+Compare mode (`uiStore.compareMode` / `comparedLayoutIds`) draws the checked layouts side by side. It is view state, not project state — it is not saved and does not travel with a shared `.mover.json`.
+
+Exactly one pane is live: the active layout keeps the real `LayoutCanvas` (tools, selection, drag, rulers) and the others are read-only `ComparisonPane`s. Clicking a read-only pane makes that layout active, handing the editable canvas over to it. Selection, drag state and the active tool are single-valued in `uiStore`, so two live canvases would either fight over that state or need it duplicated per layout; one live pane keeps a single interaction model. Every pane renders through the same `uiStore.view`, so panning or zooming moves them together — panes showing different parts of the plan would not be comparable.
+
+---
+
 ## File Versioning
 
-The `version` field follows semver. Breaking changes to the schema bump the major version. The loader checks `version` on open and can apply migrations for older files.
+The `version` field follows semver. Breaking changes to the schema bump the major version. The loader checks `version` on open and applies migrations for older files.
+
+| Version | Change |
+|---------|--------|
+| `1.0` | Initial schema; furniture in a single flat `Project.furnitureInstances` array |
+| `1.1` | Furniture moved into `furnitureLayouts` + `activeFurnitureLayoutId` (L1) |
+
+`parseProject` accepts every version in `SUPPORTED_PROJECT_VERSIONS`, migrates it forward, and re-stamps it as the current version — so a `1.0` file opens with its furniture wrapped in one default layout named "Layout 1", and saves back as `1.1`. The bump is what makes an older build refuse a newer file outright rather than opening it and silently showing no furniture.

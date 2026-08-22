@@ -1,5 +1,11 @@
 import type { Point } from '../types/project'
 
+/** Screen pixels per world unit at zoom 1 (10px per inch-or-cm grid unit at
+ * the default 12-unit grid, i.e. 10px per foot). Multiplied by `view.scale`
+ * wherever world coordinates are drawn - the main canvas and every read-only
+ * comparison pane, which must agree on it to be comparable at all. */
+export const BASE_PIXELS_PER_UNIT = 10
+
 export interface ScaleConfig {
   pixelsPerUnit: number
   zoom: number

@@ -1,0 +1,212 @@
+/* Furniture-layout tab strip (L1, #28). Visual language follows
+ * Toolbar.module.css - same accent, radius and hover treatment - so the tabs
+ * read as part of the canvas chrome rather than a separate widget. */
+
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  background: #1e1e1e;
+  border-bottom: 1px solid #333;
+  flex-shrink: 0;
+  min-height: 34px;
+}
+
+.tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow-x: auto;
+  /* The strip scrolls rather than squeezing the Compare button off-screen. */
+  flex: 1;
+  min-width: 0;
+  scrollbar-width: thin;
+}
+
+.tab {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 2px 0 6px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.tab:hover {
+  background: #2a2a2a;
+}
+
+.tab.active {
+  background: #2d5be3;
+  border-color: #2d5be3;
+}
+
+.tabLabel {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 4px;
+  max-width: 200px;
+  background: transparent;
+  border: none;
+  color: #ccc;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.tab.active .tabLabel {
+  color: #fff;
+}
+
+.tabName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Piece count: the quickest read on how two variants differ. */
+.count {
+  padding: 0 5px;
+  border-radius: 8px;
+  background: #00000040;
+  color: #aaa;
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.tab.active .count {
+  background: #ffffff30;
+  color: #eaf0ff;
+}
+
+.compareCheck {
+  margin: 0 2px 0 0;
+  accent-color: #2d5be3;
+  cursor: pointer;
+}
+
+.compareCheck:disabled {
+  cursor: default;
+}
+
+.menuButton {
+  padding: 2px 4px;
+  background: transparent;
+  border: none;
+  border-radius: 3px;
+  color: #999;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.menuButton:hover {
+  background: #ffffff20;
+  color: #fff;
+}
+
+.tab.active .menuButton {
+  color: #dde5ff;
+}
+
+.menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  min-width: 150px;
+  margin-top: 2px;
+  padding: 4px;
+  background: #202020;
+  border: 1px solid #3a3a3a;
+  border-radius: 4px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+  z-index: 100;
+}
+
+.entry {
+  display: block;
+  width: 100%;
+  padding: 6px 10px;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: #eee;
+  text-align: left;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.entry:hover:not(:disabled) {
+  background: #2d5be3;
+  color: #fff;
+}
+
+.entry:disabled {
+  color: #666;
+  cursor: default;
+}
+
+.addButton {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  background: #333;
+  border: none;
+  border-radius: 4px;
+  color: #eee;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.addButton:hover {
+  background: #444;
+}
+
+.compareButton {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  background: transparent;
+  border: 1px solid #3a3a3a;
+  border-radius: 4px;
+  color: #ccc;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.compareButton:hover:not(:disabled) {
+  background: #333;
+  color: #fff;
+}
+
+.compareButton:disabled {
+  color: #666;
+  border-color: #2c2c2c;
+  cursor: default;
+}
+
+.compareButton.compareOn {
+  background: #2d5be3;
+  border-color: #2d5be3;
+  color: #fff;
+}
+
+/* Touch devices: bigger tap targets, matching Toolbar.module.css. */
+@media (pointer: coarse) {
+  .tabLabel {
+    padding: 8px 4px;
+  }
+
+  .menuButton {
+    padding: 6px 6px;
+  }
+
+  .addButton {
+    width: 32px;
+    height: 32px;
+  }
+}

@@ -1,4 +1,6 @@
-import type { Project } from '../types/project'
+import type { FurnitureLayout, Project } from '../types/project'
+import { PROJECT_VERSION, SUPPORTED_PROJECT_VERSIONS } from '../types/project'
+import { DEFAULT_LAYOUT_NAME, createFurnitureLayout } from '../project/layouts'
 
 export class LoadError extends Error {}
 
@@ -34,7 +36,7 @@ export function parseProject(json: string): Project {
     throw new LoadError('File does not contain a project object.')
   }
   const p = data as Record<string, unknown>
-  if (p.version !== '1.0') {
+  if (typeof p.version !== 'string' || !SUPPORTED_PROJECT_VERSIONS.includes(p.version)) {
     throw new LoadError(`Unsupported project version: ${p.version}`)
   }
   // TODO: schema validation
@@ -44,10 +46,37 @@ export function parseProject(json: string): Project {
   // projects existed; SETTINGS_MIGRATIONS only backfills project.settings
   // fields, so this is handled separately.
   if (!Array.isArray(p.interiorWalls)) p.interiorWalls = []
-  if (!Array.isArray(p.furnitureInstances)) p.furnitureInstances = []
   if (!Array.isArray(p.customFurnitureDefs)) p.customFurnitureDefs = []
   if (!Array.isArray(p.furnitureSets)) p.furnitureSets = []
+  migrateFurnitureLayouts(p)
+  // Everything above brings the object up to the current shape, so it is now
+  // a PROJECT_VERSION project regardless of what it was saved as - the next
+  // save writes that version out.
+  p.version = PROJECT_VERSION
   return data as Project
+}
+
+/** L1 (#28): pre-1.1 projects carry a single flat `furnitureInstances` array.
+ * Wrap it in one default layout so an old `.mover.json` opens with all of its
+ * furniture in place, under a layout the user can then duplicate.
+ *
+ * Also repairs a 1.1 project whose `activeFurnitureLayoutId` names no layout
+ * (hand-edited file, or one truncated in transit): the rest of the app treats
+ * a dangling id as "first layout", and normalizing it here means a save
+ * writes back a consistent file rather than preserving the dangling id. */
+function migrateFurnitureLayouts(p: Record<string, unknown>): void {
+  if (!Array.isArray(p.furnitureLayouts) || p.furnitureLayouts.length === 0) {
+    const legacy = Array.isArray(p.furnitureInstances) ? p.furnitureInstances : []
+    p.furnitureLayouts = [createFurnitureLayout(DEFAULT_LAYOUT_NAME, legacy)]
+  }
+  // Dropped rather than kept alongside: leaving it would let an old build
+  // re-open the file and silently edit an array nothing else reads.
+  delete p.furnitureInstances
+
+  const layouts = p.furnitureLayouts as FurnitureLayout[]
+  if (!layouts.some((l) => l.id === p.activeFurnitureLayoutId)) {
+    p.activeFurnitureLayoutId = layouts[0].id
+  }
 }
 
 export function loadFromLocalStorage(): Project | null {

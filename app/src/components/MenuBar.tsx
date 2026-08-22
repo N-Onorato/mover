@@ -9,6 +9,7 @@ import { embedLibrary } from '../furniture/library'
 import { exportStageToPng } from '../io/exportPng'
 import { getStage } from '../canvas/stageRegistry'
 import { startImageImport } from '../canvas/tools/ImageTool'
+import { activeFurnitureInstances } from '../project/layouts'
 import styles from './MenuBar.module.css'
 
 const isMac = typeof navigator !== 'undefined' && /Mac/.test(navigator.platform)
@@ -54,16 +55,24 @@ function handleExportPng() {
   exportStageToPng(stage)
 }
 
+// A restored snapshot may not contain what was selected - the entities may
+// have been deleted, or (L1) belong to a furniture layout that isn't the
+// restored active one. Dropping the selection keeps the properties panel and
+// the delete action pointed only at what is actually on the canvas.
 function handleUndo() {
   const { project } = useProjectStore.getState()
   const previous = useHistoryStore.getState().undo(project)
-  if (previous) useProjectStore.getState().applySnapshot(previous)
+  if (!previous) return
+  useUIStore.getState().clearSelection()
+  useProjectStore.getState().applySnapshot(previous)
 }
 
 function handleRedo() {
   const { project } = useProjectStore.getState()
   const next = useHistoryStore.getState().redo(project)
-  if (next) useProjectStore.getState().applySnapshot(next)
+  if (!next) return
+  useUIStore.getState().clearSelection()
+  useProjectStore.getState().applySnapshot(next)
 }
 
 function handleSelectAll() {
@@ -71,7 +80,7 @@ function handleSelectAll() {
   const { project } = useProjectStore.getState()
   const ids = [
     ...(lockedLayers.rooms ? [] : project.rooms.map((r) => r.id)),
-    ...(lockedLayers.furniture ? [] : project.furnitureInstances.map((f) => f.id)),
+    ...(lockedLayers.furniture ? [] : activeFurnitureInstances(project).map((f) => f.id)),
     ...(lockedLayers.annotations ? [] : project.annotations.map((a) => a.id)),
     ...(lockedLayers.referenceImages ? [] : project.referenceImages.map((img) => img.id)),
   ]

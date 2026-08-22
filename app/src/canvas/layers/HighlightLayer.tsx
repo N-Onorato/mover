@@ -9,6 +9,7 @@ import {
   imageCorners,
 } from '../tools/SelectTool'
 import { wallThresholdWorld } from '../../utils/wallThreshold'
+import { activeFurnitureInstances } from '../../project/layouts'
 import type { FurnitureInstance } from '../../types/project'
 
 interface Props {
@@ -45,7 +46,7 @@ export function HighlightLayer({ pixelsPerUnit: ppu }: Props) {
   const selectedWall = useUIStore((s) => s.selectedWall)
   const rooms = useProjectStore((s) => s.project.rooms)
   const interiorWalls = useProjectStore((s) => s.project.interiorWalls)
-  const furnitureInstances = useProjectStore((s) => s.project.furnitureInstances)
+  const furnitureInstances = useProjectStore((s) => activeFurnitureInstances(s.project))
   const referenceImages = useProjectStore((s) => s.project.referenceImages)
   const dragState = useUIStore((s) => s.dragState)
 

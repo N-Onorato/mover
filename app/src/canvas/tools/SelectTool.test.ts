@@ -2,8 +2,19 @@ import { describe, expect, it, beforeEach } from 'vitest'
 import { SelectTool } from './SelectTool'
 import { useUIStore } from '../../store/uiStore'
 import { useProjectStore } from '../../store/projectStore'
+import { activeFurnitureInstances } from '../../project/layouts'
 import { useHistoryStore } from '../../store/historyStore'
 import type { FurnitureInstance, InteriorWall, ReferenceImage, Room } from '../../types/project'
+
+/** L1 (#28): furniture lives inside a layout now. Tests set both the layouts
+ * array and the active id at once, so a fixture stays a single spread. */
+const TEST_LAYOUT_ID = 'layout-test'
+function furnitureLayoutState(instances: FurnitureInstance[]) {
+  return {
+    furnitureLayouts: [{ id: TEST_LAYOUT_ID, name: 'Layout 1', furnitureInstances: instances }],
+    activeFurnitureLayoutId: TEST_LAYOUT_ID,
+  }
+}
 
 function makeFurniture(patch: Partial<FurnitureInstance> = {}): FurnitureInstance {
   return {
@@ -94,7 +105,7 @@ describe('SelectTool.onPointerDown furniture hit-testing', () => {
         ...s.project,
         rooms: [],
         interiorWalls: [],
-        furnitureInstances: [],
+        ...furnitureLayoutState([]),
         referenceImages: [],
         settings: { ...s.project.settings, snapToGrid: true, gridSize: 12 },
       },
@@ -106,7 +117,7 @@ describe('SelectTool.onPointerDown furniture hit-testing', () => {
     // falls inside its bounds, so a snapped pointer-down would always miss it.
     const furniture = makeFurniture({ x: 13, y: 13, width: 6, depth: 6 })
     useProjectStore.setState((s) => ({
-      project: { ...s.project, furnitureInstances: [furniture] },
+      project: { ...s.project, ...furnitureLayoutState([furniture]) },
     }))
 
     const clickWorld = { x: 16, y: 16 } // inside the furniture, off-grid
@@ -121,7 +132,7 @@ describe('SelectTool.onPointerDown furniture hit-testing', () => {
   it('still starts a marquee drag when the raw click misses every furniture instance', () => {
     const furniture = makeFurniture({ x: 100, y: 100, width: 6, depth: 6 })
     useProjectStore.setState((s) => ({
-      project: { ...s.project, furnitureInstances: [furniture] },
+      project: { ...s.project, ...furnitureLayoutState([furniture]) },
     }))
 
     const clickWorld = { x: 0, y: 0 }
@@ -152,7 +163,7 @@ describe('SelectTool marquee selection', () => {
         ...s.project,
         rooms: [],
         interiorWalls: [],
-        furnitureInstances: [],
+        ...furnitureLayoutState([]),
         referenceImages: [],
         settings: { ...s.project.settings, snapToGrid: false },
       },
@@ -182,7 +193,7 @@ describe('SelectTool marquee selection', () => {
       project: {
         ...s.project,
         rooms: [makeRoom()],
-        furnitureInstances: [makeFurniture()],
+        ...furnitureLayoutState([makeFurniture()]),
         interiorWalls: [makeInteriorWall()],
       },
     }))
@@ -196,7 +207,7 @@ describe('SelectTool marquee selection', () => {
 
   it('excludes furniture from the marquee when the furniture layer is locked, but still selects rooms', () => {
     useProjectStore.setState((s) => ({
-      project: { ...s.project, rooms: [makeRoom()], furnitureInstances: [makeFurniture()] },
+      project: { ...s.project, rooms: [makeRoom()], ...furnitureLayoutState([makeFurniture()]) },
     }))
     useUIStore.setState((s) => ({ lockedLayers: { ...s.lockedLayers, furniture: true } }))
 
@@ -240,7 +251,7 @@ describe('SelectTool multi-item drag (#27)', () => {
         ...s.project,
         rooms: [],
         interiorWalls: [],
-        furnitureInstances: [],
+        ...furnitureLayoutState([]),
         referenceImages: [],
         settings: { ...s.project.settings, snapToGrid: false },
       },
@@ -259,7 +270,7 @@ describe('SelectTool multi-item drag (#27)', () => {
       project: {
         ...s.project,
         rooms: [room, otherRoom],
-        furnitureInstances: [furniture],
+        ...furnitureLayoutState([furniture]),
         interiorWalls: [wall],
       },
     }))
@@ -274,7 +285,7 @@ describe('SelectTool multi-item drag (#27)', () => {
 
     const { project } = useProjectStore.getState()
     expect(project.rooms.find((r) => r.id === 'room-1')!.points[0]).toEqual({ x: 5, y: 10 })
-    expect(project.furnitureInstances.find((f) => f.id === 'furn-1')).toMatchObject({ x: 105, y: 110 })
+    expect(activeFurnitureInstances(project).find((f) => f.id === 'furn-1')).toMatchObject({ x: 105, y: 110 })
     expect(project.interiorWalls.find((w) => w.id === 'wall-1')).toMatchObject({
       a: { x: 210, y: 215 },
       b: { x: 220, y: 215 },
@@ -301,7 +312,7 @@ describe('SelectTool multi-item drag (#27)', () => {
 
   it('routes single-item drags through the same shared multi drag path when nothing else is selected', () => {
     const furniture = makeFurniture({ id: 'furn-1' })
-    useProjectStore.setState((s) => ({ project: { ...s.project, furnitureInstances: [furniture] } }))
+    useProjectStore.setState((s) => ({ project: { ...s.project, ...furnitureLayoutState([furniture]) } }))
     useUIStore.setState({ selectedIds: ['furn-1'] })
 
     const click = { x: 13, y: 13 }
@@ -313,7 +324,7 @@ describe('SelectTool multi-item drag (#27)', () => {
 
   it('wants raw (unsnapped) pointer coordinates for a multi-selection that includes furniture, so the drag tracks the cursor instead of jumping in grid steps', () => {
     const furniture = makeFurniture({ id: 'furn-1' })
-    useProjectStore.setState((s) => ({ project: { ...s.project, furnitureInstances: [furniture] } }))
+    useProjectStore.setState((s) => ({ project: { ...s.project, ...furnitureLayoutState([furniture]) } }))
     useUIStore.setState({ selectedIds: ['room-1', 'furn-1'] })
 
     expect(SelectTool.wantsRawPointer?.()).toBe(true)
@@ -324,7 +335,7 @@ describe('SelectTool multi-item drag (#27)', () => {
     const furniture = makeFurniture({ id: 'furn-1', x: 100, y: 100 })
 
     useProjectStore.setState((s) => ({
-      project: { ...s.project, rooms: [room], furnitureInstances: [furniture] },
+      project: { ...s.project, rooms: [room], ...furnitureLayoutState([furniture]) },
     }))
     useUIStore.setState({ selectedIds: ['room-1', 'furn-1'] })
 
@@ -343,7 +354,7 @@ describe('SelectTool multi-item drag (#27)', () => {
 
     const { project } = useProjectStore.getState()
     expect(project.rooms).toEqual([])
-    expect(project.furnitureInstances).toEqual([])
+    expect(activeFurnitureInstances(project)).toEqual([])
     expect(useUIStore.getState().selectedIds).toEqual([])
   })
 })
@@ -371,7 +382,7 @@ describe('SelectTool reference-image click priority (#33)', () => {
         ...s.project,
         rooms: [],
         interiorWalls: [],
-        furnitureInstances: [],
+        ...furnitureLayoutState([]),
         referenceImages: [],
         settings: { ...s.project.settings, snapToGrid: false },
       },
@@ -426,7 +437,7 @@ describe('SelectTool reference-image click priority (#33)', () => {
     useProjectStore.setState((s) => ({
       project: {
         ...s.project,
-        furnitureInstances: [makeFurniture({ x: 8, y: 8, width: 6, depth: 6 })],
+        ...furnitureLayoutState([makeFurniture({ x: 8, y: 8, width: 6, depth: 6 })]),
         referenceImages: [makeReferenceImage()],
       },
     }))
@@ -504,7 +515,7 @@ describe('SelectTool reference-image drag (#30)', () => {
         ...s.project,
         rooms: [],
         interiorWalls: [],
-        furnitureInstances: [],
+        ...furnitureLayoutState([]),
         referenceImages: [],
         settings: { ...s.project.settings, snapToGrid: false },
       },
