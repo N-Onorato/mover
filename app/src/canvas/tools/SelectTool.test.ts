@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach } from 'vitest'
-import { SelectTool } from './SelectTool'
+import { SelectTool, computeSelectionBox } from './SelectTool'
 import { useUIStore } from '../../store/uiStore'
 import { useProjectStore } from '../../store/projectStore'
 import { activeFurnitureInstances } from '../../project/layouts'
@@ -746,5 +746,321 @@ describe('SelectTool stuck-gesture recovery (#41)', () => {
     expect(useUIStore.getState().selectedIds).toEqual(['furn-1'])
     expect(useUIStore.getState().marquee).toBeNull()
     expect(useUIStore.getState().interactionMode).toBe('idle')
+  })
+})
+
+/** O7 (#47): one bounding box around a 2+ item selection, with a rotate handle
+ * above it and the whole interior acting as a move grip. */
+describe('SelectTool multi-selection box (#47)', () => {
+  const NO_MODS = { shift: false, ctrl: false }
+  const PPU = 10
+
+  // Two 10x10 pieces side by side: selection bounds x 0..40, y 0..10, so the
+  // pivot is (20, 5) and the rotate handle sits straight above it at
+  // (20, -3) (0.6 of padding plus the 2.4 handle offset at 10 px/unit).
+  const HANDLE = { x: 20, y: -3 }
+  const PIVOT = { x: 20, y: 5 }
+
+  function setFurniture(...items: FurnitureInstance[]) {
+    useProjectStore.setState((s) => ({ project: { ...s.project, ...furnitureLayoutState(items) } }))
+  }
+
+  const pieceA = () => makeFurniture({ id: 'a', x: 0, y: 0, width: 10, depth: 10 })
+  const pieceB = () => makeFurniture({ id: 'b', x: 30, y: 0, width: 10, depth: 10 })
+
+  function furnitureById(id: string) {
+    return activeFurnitureInstances(useProjectStore.getState().project).find((f) => f.id === id)!
+  }
+
+  function rotateBy(pointerTo: { x: number; y: number }, mods = NO_MODS) {
+    SelectTool.onPointerDown(HANDLE, HANDLE, PPU, NO_MODS)
+    SelectTool.onPointerMove(pointerTo, PPU, mods)
+    SelectTool.onPointerUp(pointerTo, PPU, mods)
+  }
+
+  beforeEach(() => {
+    useUIStore.setState({
+      selectedIds: [],
+      dragState: null,
+      interactionMode: 'idle',
+      dragAnchorWorld: null,
+      marquee: null,
+      lockedLayers: {
+        referenceImages: false,
+        rooms: false,
+        furniture: false,
+        annotations: false,
+      },
+    })
+    useProjectStore.setState((s) => ({
+      project: {
+        ...s.project,
+        rooms: [],
+        interiorWalls: [],
+        ...furnitureLayoutState([]),
+        referenceImages: [],
+        settings: { ...s.project.settings, snapToGrid: false },
+      },
+    }))
+    useHistoryStore.setState({ past: [], future: [] })
+  })
+
+  it('computes a box only for 2+ selectable entities', () => {
+    setFurniture(pieceA(), pieceB())
+    const project = useProjectStore.getState().project
+
+    expect(computeSelectionBox(['a'], project, PPU)).toBeNull()
+    const box = computeSelectionBox(['a', 'b'], project, PPU)!
+    expect(box.bounds).toEqual({ x: 0, y: 0, width: 40, height: 10 })
+    expect(box.rect.x).toBeLessThan(0)
+  })
+
+  it('has no box when only one of two selected items is selectable', () => {
+    setFurniture(pieceA(), makeFurniture({ id: 'b', x: 30, y: 0, locked: true }))
+    expect(computeSelectionBox(['a', 'b'], useProjectStore.getState().project, PPU)).toBeNull()
+  })
+
+  it('does not count a room-anchored wall as a second selected item', () => {
+    useProjectStore.setState((s) => ({
+      project: { ...s.project, rooms: [makeRoom()], interiorWalls: [makeInteriorWall({ roomId: 'room-1' })] },
+    }))
+    expect(computeSelectionBox(['room-1', 'nothing'], useProjectStore.getState().project, PPU)).toBeNull()
+  })
+
+  it('starts a multi drag when pressing inside the box on empty space between members', () => {
+    setFurniture(pieceA(), pieceB())
+    useUIStore.setState({ selectedIds: ['a', 'b'] })
+
+    const gap = { x: 20, y: 5 } // between the two pieces, touching neither
+    SelectTool.onPointerDown(gap, gap, PPU, NO_MODS)
+
+    expect(useUIStore.getState().interactionMode).toBe('multi')
+    expect(useUIStore.getState().dragState).toMatchObject({ kind: 'multi', furnitureIds: ['a', 'b'] })
+    expect(useUIStore.getState().selectedIds).toEqual(['a', 'b'])
+  })
+
+  it('moves every selected entity as one undo step when dragging the box interior', () => {
+    setFurniture(pieceA(), pieceB())
+    useUIStore.setState({ selectedIds: ['a', 'b'] })
+
+    const gap = { x: 20, y: 5 }
+    SelectTool.onPointerDown(gap, gap, PPU, NO_MODS)
+    SelectTool.onPointerMove({ x: 25, y: 12 }, PPU, NO_MODS)
+    SelectTool.onPointerUp({ x: 25, y: 12 }, PPU, NO_MODS)
+
+    expect(furnitureById('a')).toMatchObject({ x: 5, y: 7 })
+    expect(furnitureById('b')).toMatchObject({ x: 35, y: 7 })
+    expect(useHistoryStore.getState().past).toHaveLength(1)
+  })
+
+  it('lets an unselected furniture piece inside the box win the click, as it does without a box', () => {
+    setFurniture(pieceA(), pieceB(), makeFurniture({ id: 'c', x: 16, y: 2, width: 4, depth: 4 }))
+    useUIStore.setState({ selectedIds: ['a', 'b'] })
+
+    const onC = { x: 18, y: 4 }
+    SelectTool.onPointerDown(onC, onC, PPU, NO_MODS)
+
+    expect(useUIStore.getState().selectedIds).toEqual(['c'])
+  })
+
+  it('starts a multiRotate drag on the rotate handle, pivoting about the box center', () => {
+    setFurniture(pieceA(), pieceB())
+    useUIStore.setState({ selectedIds: ['a', 'b'] })
+
+    SelectTool.onPointerDown(HANDLE, HANDLE, PPU, NO_MODS)
+
+    expect(useUIStore.getState().interactionMode).toBe('multiRotate')
+    expect(useUIStore.getState().dragState).toMatchObject({
+      kind: 'multiRotate',
+      furnitureIds: ['a', 'b'],
+      pivot: PIVOT,
+      delta: 0,
+    })
+    expect(SelectTool.wantsRawPointer?.()).toBe(true)
+  })
+
+  it('previews the rotation through dragState without touching the project', () => {
+    setFurniture(pieceA(), pieceB())
+    useUIStore.setState({ selectedIds: ['a', 'b'] })
+
+    SelectTool.onPointerDown(HANDLE, HANDLE, PPU, NO_MODS)
+    SelectTool.onPointerMove({ x: 40, y: 5 }, PPU, NO_MODS) // pointer due right of the pivot
+
+    const drag = useUIStore.getState().dragState
+    expect(drag?.kind === 'multiRotate' && drag.delta).toBeCloseTo(90)
+    expect(furnitureById('a')).toMatchObject({ x: 0, y: 0, rotation: 0 })
+    expect(useHistoryStore.getState().past).toHaveLength(0)
+  })
+
+  it('rotates furniture about the box center on release, in one undo step', () => {
+    setFurniture(pieceA(), pieceB())
+    useUIStore.setState({ selectedIds: ['a', 'b'] })
+
+    rotateBy({ x: 40, y: 5 })
+
+    const a = furnitureById('a')
+    const b = furnitureById('b')
+    expect(a.rotation).toBeCloseTo(90)
+    expect(a.x).toBeCloseTo(15)
+    expect(a.y).toBeCloseTo(-15)
+    expect(b.rotation).toBeCloseTo(90)
+    expect(b.x).toBeCloseTo(15)
+    expect(b.y).toBeCloseTo(15)
+    expect(useHistoryStore.getState().past).toHaveLength(1)
+    expect(useUIStore.getState().selectedIds).toEqual(['a', 'b'])
+    expect(useUIStore.getState().dragState).toBeNull()
+    expect(useUIStore.getState().interactionMode).toBe('idle')
+  })
+
+  it('rotates rooms, a selected interior wall, and a wall anchored to a selected room together', () => {
+    const roomA = makeRoom({
+      id: 'room-1',
+      points: [
+        { x: 0, y: 0 },
+        { x: 10, y: 0 },
+        { x: 10, y: 10 },
+        { x: 0, y: 10 },
+      ],
+    })
+    const roomB = makeRoom({
+      id: 'room-2',
+      points: [
+        { x: 30, y: 0 },
+        { x: 40, y: 0 },
+        { x: 40, y: 10 },
+        { x: 30, y: 10 },
+      ],
+    })
+    const anchored = makeInteriorWall({ id: 'w-anchored', roomId: 'room-1', a: { x: 0, y: 5 }, b: { x: 10, y: 5 } })
+    useProjectStore.setState((s) => ({
+      project: { ...s.project, rooms: [roomA, roomB], interiorWalls: [anchored] },
+    }))
+    useUIStore.setState({ selectedIds: ['room-1', 'room-2'] })
+
+    rotateBy({ x: 40, y: 5 })
+
+    const { project } = useProjectStore.getState()
+    // 90 degrees about (20, 5): (0,0) -> (25,-15); (30,0) -> (25,15)
+    expect(project.rooms[0].points[0].x).toBeCloseTo(25)
+    expect(project.rooms[0].points[0].y).toBeCloseTo(-15)
+    expect(project.rooms[1].points[0].x).toBeCloseTo(25)
+    expect(project.rooms[1].points[0].y).toBeCloseTo(15)
+    // (0,5) -> (20,-15); (10,5) -> (20,-5)
+    expect(project.interiorWalls[0].a.x).toBeCloseTo(20)
+    expect(project.interiorWalls[0].a.y).toBeCloseTo(-15)
+    expect(project.interiorWalls[0].b.x).toBeCloseTo(20)
+    expect(project.interiorWalls[0].b.y).toBeCloseTo(-5)
+    expect(useHistoryStore.getState().past).toHaveLength(1)
+  })
+
+  it('rotates a reference image along with its calibration points', () => {
+    useProjectStore.setState((s) => ({
+      project: {
+        ...s.project,
+        ...furnitureLayoutState([pieceB()]),
+        referenceImages: [
+          makeReferenceImage({
+            id: 'img-1',
+            x: 0,
+            y: 0,
+            width: 10,
+            height: 10,
+            calibration: { p1: { x: 0, y: 0 }, p2: { x: 10, y: 0 }, realWorldDistance: 10 },
+          }),
+        ],
+      },
+    }))
+    useUIStore.setState({ selectedIds: ['img-1', 'b'] })
+
+    rotateBy({ x: 40, y: 5 })
+
+    const img = useProjectStore.getState().project.referenceImages[0]
+    expect(img.rotation).toBeCloseTo(90)
+    expect(img.x).toBeCloseTo(15)
+    expect(img.y).toBeCloseTo(-15)
+    expect(img.calibration!.p1.x).toBeCloseTo(25)
+    expect(img.calibration!.p1.y).toBeCloseTo(-15)
+  })
+
+  it('leaves locked entities out of the rotation', () => {
+    setFurniture(pieceA(), pieceB(), makeFurniture({ id: 'locked', x: 100, y: 100, locked: true }))
+    useUIStore.setState({ selectedIds: ['a', 'b', 'locked'] })
+
+    rotateBy({ x: 40, y: 5 })
+
+    expect(furnitureById('locked')).toMatchObject({ x: 100, y: 100, rotation: 0 })
+    expect(furnitureById('a').rotation).toBeCloseTo(90)
+  })
+
+  it('snaps the rotation delta to 15 degrees when snap-to-grid is on, and Ctrl inverts that', () => {
+    setFurniture(pieceA(), pieceB())
+    useUIStore.setState({ selectedIds: ['a', 'b'] })
+    useProjectStore.setState((s) => ({ project: { ...s.project, settings: { ...s.project.settings, snapToGrid: true } } }))
+
+    // ~20 degrees clockwise of straight up around the pivot.
+    const rad = (20 * Math.PI) / 180
+    const pointer = { x: PIVOT.x + 50 * Math.sin(rad), y: PIVOT.y - 50 * Math.cos(rad) }
+
+    rotateBy(pointer)
+    expect(furnitureById('a').rotation).toBe(15)
+
+    // Back to the start, then the same drag with Ctrl held (snap off).
+    setFurniture(pieceA(), pieceB())
+    rotateBy(pointer, { shift: false, ctrl: true })
+    expect(furnitureById('a').rotation).toBeCloseTo(20)
+  })
+
+  it('does not snap when snap-to-grid is off, and Ctrl turns it on', () => {
+    setFurniture(pieceA(), pieceB())
+    useUIStore.setState({ selectedIds: ['a', 'b'] })
+    const rad = (20 * Math.PI) / 180
+    const pointer = { x: PIVOT.x + 50 * Math.sin(rad), y: PIVOT.y - 50 * Math.cos(rad) }
+
+    rotateBy(pointer, { shift: false, ctrl: true })
+
+    expect(furnitureById('a').rotation).toBe(15)
+  })
+
+  it('commits nothing and snapshots nothing when the handle is released without turning', () => {
+    setFurniture(pieceA(), pieceB())
+    useUIStore.setState({ selectedIds: ['a', 'b'] })
+
+    SelectTool.onPointerDown(HANDLE, HANDLE, PPU, NO_MODS)
+    SelectTool.onPointerUp(HANDLE, PPU, NO_MODS)
+
+    expect(useHistoryStore.getState().past).toHaveLength(0)
+    expect(furnitureById('a')).toMatchObject({ x: 0, y: 0, rotation: 0 })
+    expect(useUIStore.getState().interactionMode).toBe('idle')
+  })
+
+  it('drops an unfinished rotate on a gesture cancel without committing', () => {
+    setFurniture(pieceA(), pieceB())
+    useUIStore.setState({ selectedIds: ['a', 'b'] })
+
+    SelectTool.onPointerDown(HANDLE, HANDLE, PPU, NO_MODS)
+    SelectTool.onPointerMove({ x: 40, y: 5 }, PPU, NO_MODS)
+    SelectTool.onGestureCancel?.()
+
+    expect(useUIStore.getState().dragState).toBeNull()
+    expect(furnitureById('a').rotation).toBe(0)
+    expect(useHistoryStore.getState().past).toHaveLength(0)
+  })
+
+  it('leaves single-furniture selection alone: its own rotate handle, no multi box handle', () => {
+    setFurniture(pieceA(), pieceB())
+    useUIStore.setState({ selectedIds: ['a'] })
+
+    // The single-furniture rotate handle for an unrotated 10x10 piece at the
+    // origin: 24px above top-mid, i.e. (5, -2.4).
+    SelectTool.onPointerDown({ x: 5, y: -2.4 }, { x: 5, y: -2.4 }, PPU, NO_MODS)
+    expect(useUIStore.getState().interactionMode).toBe('furnitureRotate')
+  })
+
+  it('does not treat the box handle position as a handle once only one item is selected', () => {
+    setFurniture(pieceA(), pieceB())
+    useUIStore.setState({ selectedIds: ['a'] })
+
+    SelectTool.onPointerDown(HANDLE, HANDLE, PPU, NO_MODS)
+    expect(useUIStore.getState().interactionMode).toBe('marquee')
   })
 })

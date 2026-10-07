@@ -1,16 +1,27 @@
-import { Circle, Layer, Line } from 'react-konva'
+import { useMemo } from 'react'
+import { Circle, Layer, Line, Text } from 'react-konva'
 import { useUIStore } from '../../store/uiStore'
 import { useProjectStore } from '../../store/projectStore'
 import {
+  computeSelectionBox,
   VERTEX_HIT_THRESHOLD_PX,
   FURNITURE_HANDLE_HIT_THRESHOLD_PX,
   furnitureCorners,
   furnitureRotateHandle,
   imageCorners,
 } from '../tools/SelectTool'
+import {
+  rotateFurniture,
+  rotateImage,
+  rotateInteriorWall,
+  rotatePoints,
+  selectionRotateHandle,
+  type Rect,
+} from '../tools/multiRotate'
+import { rectPoints, rotatePoint } from '../../utils/geometry'
 import { wallThresholdWorld } from '../../utils/wallThreshold'
 import { activeFurnitureInstances } from '../../project/layouts'
-import type { FurnitureInstance } from '../../types/project'
+import type { FurnitureInstance, Point } from '../../types/project'
 
 interface Props {
   pixelsPerUnit: number
@@ -41,6 +52,68 @@ function SelectionOutline({ points, closed = true }: { points: number[]; closed?
   )
 }
 
+/** O7 (#47): the multi-selection bounding box with its rotate handle and
+ * stalk, mirroring the single-furniture rotate handle's look. `rect` is the
+ * box at rest; a live move adds `offset`, a live rotate turns the whole box
+ * (and handle) about `rotation.pivot`, with the current angle read out next
+ * to the handle. */
+function MultiSelectionBox({
+  rect,
+  ppu,
+  offset,
+  rotation,
+}: {
+  rect: Rect
+  ppu: number
+  offset: Point | null
+  rotation: { pivot: Point; delta: number } | null
+}) {
+  const place = (p: Point): Point => {
+    const r = rotation ? rotatePoint(p, rotation.pivot, rotation.delta) : p
+    return offset ? { x: r.x + offset.x, y: r.y + offset.y } : r
+  }
+  const corners = rectPoints(rect.x, rect.y, rect.width, rect.height).map(place)
+  const handle = place(selectionRotateHandle(rect, ppu))
+  const topMid = { x: (corners[0].x + corners[1].x) / 2, y: (corners[0].y + corners[1].y) / 2 }
+
+  return (
+    <>
+      <Line
+        points={corners.flatMap((p) => [p.x * ppu, p.y * ppu])}
+        closed
+        stroke="#4a9eff"
+        strokeWidth={1.5}
+        listening={false}
+      />
+      <Line
+        points={[topMid.x * ppu, topMid.y * ppu, handle.x * ppu, handle.y * ppu]}
+        stroke="#4caf50"
+        strokeWidth={1}
+        listening={false}
+      />
+      <Circle
+        x={handle.x * ppu}
+        y={handle.y * ppu}
+        radius={FURNITURE_HANDLE_RADIUS_PX}
+        fill="#4caf50"
+        opacity={0.9}
+        listening={false}
+      />
+      {rotation && (
+        <Text
+          x={handle.x * ppu + FURNITURE_HANDLE_RADIUS_PX + 6}
+          y={handle.y * ppu - 6}
+          text={`${Number(rotation.delta.toFixed(1))}°`}
+          fill="#4caf50"
+          fontSize={12}
+          fontStyle="bold"
+          listening={false}
+        />
+      )}
+    </>
+  )
+}
+
 export function HighlightLayer({ pixelsPerUnit: ppu }: Props) {
   const selectedIds = useUIStore((s) => s.selectedIds)
   const selectedWall = useUIStore((s) => s.selectedWall)
@@ -49,6 +122,15 @@ export function HighlightLayer({ pixelsPerUnit: ppu }: Props) {
   const furnitureInstances = useProjectStore((s) => activeFurnitureInstances(s.project))
   const referenceImages = useProjectStore((s) => s.project.referenceImages)
   const dragState = useUIStore((s) => s.dragState)
+  const project = useProjectStore((s) => s.project)
+
+  // O7 (#47): the multi-selection bounding box. Computed from the committed
+  // project, which no preview drag mutates, so it stays put (and isn't
+  // recomputed) while the live move/rotate transform is applied on top of it.
+  const selectionBox = useMemo(
+    () => computeSelectionBox(selectedIds, project, ppu),
+    [selectedIds, project, ppu],
+  )
 
   const selectedRoom =
     selectedIds.length === 1 ? rooms.find((r) => r.id === selectedIds[0]) : undefined
@@ -99,19 +181,23 @@ export function HighlightLayer({ pixelsPerUnit: ppu }: Props) {
       ? { ...selectedImageBase, x: selectedImageBase.x + dragState.dx, y: selectedImageBase.y + dragState.dy }
       : selectedImageBase
 
-  // Multi-select: no resize/rotate/vertex handles (those only make sense for
-  // a single entity), just a plain outline per selected item so a marquee or
-  // shift-click selection is visually confirmed.
+  // Multi-select: no per-entity resize/rotate/vertex handles (those only make
+  // sense for a single entity), just a plain outline per selected item so a
+  // marquee or shift-click selection is visually confirmed - plus, when the
+  // selection has a bounding box (O7, #47), the box with its rotate handle.
   if (selectedIds.length > 1) {
     const idSet = new Set(selectedIds)
     const multiDrag = dragState?.kind === 'multi' ? dragState : null
+    const rotateDrag = dragState?.kind === 'multiRotate' ? dragState : null
     const outlines: { points: number[]; closed: boolean }[] = []
     for (const r of rooms) {
       if (idSet.has(r.id)) {
         const points =
           multiDrag && multiDrag.roomIds.includes(r.id)
             ? r.points.map((p) => ({ x: p.x + multiDrag.dx, y: p.y + multiDrag.dy }))
-            : r.points
+            : rotateDrag && rotateDrag.roomIds.includes(r.id)
+              ? rotatePoints(r.points, rotateDrag.pivot, rotateDrag.delta)
+              : r.points
         outlines.push({ points: points.flatMap((p) => [p.x * ppu, p.y * ppu]), closed: true })
       }
     }
@@ -120,7 +206,9 @@ export function HighlightLayer({ pixelsPerUnit: ppu }: Props) {
         const withPos =
           multiDrag && multiDrag.furnitureIds.includes(f.id)
             ? { ...f, x: f.x + multiDrag.dx, y: f.y + multiDrag.dy }
-            : f
+            : rotateDrag && rotateDrag.furnitureIds.includes(f.id)
+              ? { ...f, ...rotateFurniture(f, rotateDrag.pivot, rotateDrag.delta) }
+              : f
         outlines.push({ points: furnitureCorners(withPos).flatMap((p) => [p.x * ppu, p.y * ppu]), closed: true })
       }
     }
@@ -132,7 +220,9 @@ export function HighlightLayer({ pixelsPerUnit: ppu }: Props) {
                 a: { x: w.a.x + multiDrag.dx, y: w.a.y + multiDrag.dy },
                 b: { x: w.b.x + multiDrag.dx, y: w.b.y + multiDrag.dy },
               }
-            : w
+            : rotateDrag && rotateDrag.wallIds.includes(w.id)
+              ? rotateInteriorWall(w, rotateDrag.pivot, rotateDrag.delta)
+              : w
         outlines.push({ points: [seg.a.x * ppu, seg.a.y * ppu, seg.b.x * ppu, seg.b.y * ppu], closed: false })
       }
     }
@@ -141,7 +231,9 @@ export function HighlightLayer({ pixelsPerUnit: ppu }: Props) {
         const withPos =
           multiDrag && multiDrag.imageIds.includes(img.id)
             ? { ...img, x: img.x + multiDrag.dx, y: img.y + multiDrag.dy }
-            : img
+            : rotateDrag && rotateDrag.imageIds.includes(img.id)
+              ? { ...img, ...rotateImage(img, rotateDrag.pivot, rotateDrag.delta) }
+              : img
         outlines.push({ points: imageCorners(withPos).flatMap((p) => [p.x * ppu, p.y * ppu]), closed: true })
       }
     }
@@ -151,6 +243,14 @@ export function HighlightLayer({ pixelsPerUnit: ppu }: Props) {
         {outlines.map((o, i) => (
           <SelectionOutline key={i} points={o.points} closed={o.closed} />
         ))}
+        {selectionBox && (
+          <MultiSelectionBox
+            rect={selectionBox.rect}
+            ppu={ppu}
+            offset={multiDrag ? { x: multiDrag.dx, y: multiDrag.dy } : null}
+            rotation={rotateDrag ? { pivot: rotateDrag.pivot, delta: rotateDrag.delta } : null}
+          />
+        )}
       </Layer>
     )
   }

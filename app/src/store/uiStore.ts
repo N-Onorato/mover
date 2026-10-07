@@ -141,6 +141,27 @@ export interface MultiDragState {
   dy: number
 }
 
+/** O7 (#47): the multi-selection rotate drag - every selected room, furniture
+ * instance, interior wall and reference image rotates as one rigid body about
+ * `pivot` (the center of the selection's bounding box, frozen at pointer-down
+ * so the pivot doesn't wander as the preview changes). Same id lists as
+ * MultiDragState, built by the same function, so move and rotate always
+ * agree on what is in the selection.
+ *
+ * Like the multi-move state it only stores the transform: nothing in
+ * projectStore is touched until pointer-up, and the preview layers derive
+ * live geometry by rotating the still-current project state by `delta`. */
+export interface MultiRotateDragState {
+  kind: 'multiRotate'
+  roomIds: string[]
+  furnitureIds: string[]
+  wallIds: string[]
+  imageIds: string[]
+  pivot: Point
+  /** Live rotation in degrees (positive = clockwise), already snapped. */
+  delta: number
+}
+
 export type DragState =
   | WallDragState
   | VertexDragState
@@ -148,6 +169,7 @@ export type DragState =
   | FurnitureResizeDragState
   | FurnitureRotateDragState
   | MultiDragState
+  | MultiRotateDragState
 
 /** SelectTool's interaction state machine. Lives in the store (rather than a
  * tool-module-level `let`) so it's inspectable and can't drift out of sync
@@ -161,6 +183,7 @@ export type InteractionMode =
   | 'furnitureResize'
   | 'furnitureRotate'
   | 'multi'
+  | 'multiRotate'
 
 export type CatalogTab = 'catalog' | 'sets'
 
