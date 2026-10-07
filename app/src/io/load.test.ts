@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { LoadError, parseProject } from './load'
+import { PROJECT_VERSION } from '../types/project'
+import { activeFurnitureInstances } from '../project/layouts'
 
 function baseProject(settingsOverride: Record<string, unknown> = {}) {
   return {
@@ -33,6 +35,16 @@ describe('parseProject', () => {
     expect(() => parseProject(JSON.stringify({ ...baseProject(), version: '0.1' }))).toThrow(
       LoadError,
     )
+    expect(() => parseProject(JSON.stringify({ ...baseProject(), version: '2.0' }))).toThrow(
+      LoadError,
+    )
+  })
+
+  it('accepts the current version as well as 1.0', () => {
+    const current = parseProject(
+      JSON.stringify({ ...baseProject(), version: PROJECT_VERSION, furnitureInstances: undefined }),
+    )
+    expect(current.version).toBe(PROJECT_VERSION)
   })
 
   it('backfills rulerMode when missing', () => {
@@ -98,5 +110,96 @@ describe('parseProject', () => {
       JSON.stringify({ ...baseProject(), interiorWalls: [wall] }),
     )
     expect(project.interiorWalls).toEqual([wall])
+  })
+})
+
+describe('parseProject furniture layout migration (L1, #28)', () => {
+  const instance = {
+    id: 'furn-1',
+    definitionId: 'sofa-3',
+    x: 10,
+    y: 20,
+    width: 84,
+    depth: 38,
+    rotation: 0,
+    fillColor: '#abcdef',
+    label: 'Sofa',
+    locked: false,
+    visible: true,
+  }
+
+  it('wraps a pre-1.1 flat furnitureInstances array into one default layout', () => {
+    const project = parseProject(
+      JSON.stringify({ ...baseProject(), furnitureInstances: [instance] }),
+    )
+
+    expect(project.furnitureLayouts).toHaveLength(1)
+    expect(project.furnitureLayouts[0].name).toBe('Layout 1')
+    expect(project.furnitureLayouts[0].furnitureInstances).toEqual([instance])
+    expect(project.activeFurnitureLayoutId).toBe(project.furnitureLayouts[0].id)
+    expect(activeFurnitureInstances(project)).toEqual([instance])
+  })
+
+  it('drops the legacy flat array so nothing can edit it by mistake', () => {
+    const project = parseProject(
+      JSON.stringify({ ...baseProject(), furnitureInstances: [instance] }),
+    )
+    expect('furnitureInstances' in project).toBe(false)
+  })
+
+  it('re-stamps a migrated 1.0 file as the current version', () => {
+    const project = parseProject(JSON.stringify({ ...baseProject(), version: '1.0' }))
+    expect(project.version).toBe(PROJECT_VERSION)
+  })
+
+  it('gives a project with no furniture at all one empty layout', () => {
+    const project = parseProject(JSON.stringify(baseProject()))
+    expect(project.furnitureLayouts).toHaveLength(1)
+    expect(project.furnitureLayouts[0].furnitureInstances).toEqual([])
+  })
+
+  it('round-trips existing layouts and the active id untouched', () => {
+    const layouts = [
+      { id: 'l1', name: 'With sofa', furnitureInstances: [instance] },
+      { id: 'l2', name: 'Without', furnitureInstances: [] },
+    ]
+    const project = parseProject(
+      JSON.stringify({
+        ...baseProject(),
+        version: PROJECT_VERSION,
+        furnitureLayouts: layouts,
+        activeFurnitureLayoutId: 'l2',
+      }),
+    )
+
+    expect(project.furnitureLayouts).toEqual(layouts)
+    expect(project.activeFurnitureLayoutId).toBe('l2')
+  })
+
+  it('repairs an active id that names no layout', () => {
+    const project = parseProject(
+      JSON.stringify({
+        ...baseProject(),
+        version: PROJECT_VERSION,
+        furnitureLayouts: [{ id: 'l1', name: 'A', furnitureInstances: [] }],
+        activeFurnitureLayoutId: 'gone',
+      }),
+    )
+
+    expect(project.activeFurnitureLayoutId).toBe('l1')
+  })
+
+  it('backfills a layout when furnitureLayouts is present but empty', () => {
+    const project = parseProject(
+      JSON.stringify({
+        ...baseProject(),
+        version: PROJECT_VERSION,
+        furnitureLayouts: [],
+        furnitureInstances: [instance],
+      }),
+    )
+
+    expect(project.furnitureLayouts).toHaveLength(1)
+    expect(project.furnitureLayouts[0].furnitureInstances).toEqual([instance])
   })
 })

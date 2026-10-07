@@ -16,6 +16,7 @@ import { isDoubleClick } from '../../utils/doubleClick'
 import { isCoarsePointer } from '../../utils/pointer'
 import { wallThresholdWorld } from '../../utils/wallThreshold'
 import { MIN_FURNITURE_SIZE } from '../../furniture/catalog'
+import { activeFurnitureInstances } from '../../project/layouts'
 
 /** Keyboard modifiers active for a pointer event, forwarded by LayoutCanvas
  * from the native MouseEvent so tools don't need their own window listeners. */
@@ -106,8 +107,11 @@ let lastClickEdge: { roomId: string; edgeIndex: number } | null = null
  * (item clicked was already part of a >1-item selection) or just the one
  * clicked item (nothing else selected). */
 function buildMultiDragState(selectedIds: string[]): MultiDragState {
-  const { rooms, interiorWalls, furnitureInstances, referenceImages } =
-    useProjectStore.getState().project
+  const { project } = useProjectStore.getState()
+  const { rooms, interiorWalls, referenceImages } = project
+  // Only the active layout's furniture is editable, so it's the only
+  // furniture any hit test, drag or marquee in this tool ever sees (L1, #28).
+  const furnitureInstances = activeFurnitureInstances(project)
   const selectedSet = new Set(selectedIds)
   const roomsById = new Map(rooms.map((r) => [r.id, r]))
 
@@ -175,7 +179,9 @@ export const SelectTool: ToolHandlers = {
     setInteractionMode('idle')
     setDragAnchorWorld(null)
 
-    const { rooms, interiorWalls, furnitureInstances, referenceImages } = useProjectStore.getState().project
+    const { project } = useProjectStore.getState()
+    const { rooms, interiorWalls, referenceImages } = project
+    const furnitureInstances = activeFurnitureInstances(project)
     const {
       lockedLayers,
       selectedIds,
@@ -558,7 +564,9 @@ export const SelectTool: ToolHandlers = {
 
     if (mode === 'marquee' && marquee && endPt) {
       const movedWorld = distance(marquee.start, marquee.end)
-      const { rooms, interiorWalls, furnitureInstances, referenceImages } = useProjectStore.getState().project
+      const { project } = useProjectStore.getState()
+      const { rooms, interiorWalls, referenceImages } = project
+      const furnitureInstances = activeFurnitureInstances(project)
       const minX = Math.min(marquee.start.x, marquee.end.x)
       const maxX = Math.max(marquee.start.x, marquee.end.x)
       const minY = Math.min(marquee.start.y, marquee.end.y)
@@ -647,7 +655,7 @@ export const SelectTool: ToolHandlers = {
         const { project } = useProjectStore.getState()
         useHistoryStore.getState().pushSnapshot(project)
         const roomsById = new Map(project.rooms.map((r) => [r.id, r]))
-        const furnitureById = new Map(project.furnitureInstances.map((f) => [f.id, f]))
+        const furnitureById = new Map(activeFurnitureInstances(project).map((f) => [f.id, f]))
         const wallsById = new Map(project.interiorWalls.map((w) => [w.id, w]))
         const imagesById = new Map(project.referenceImages.map((img) => [img.id, img]))
 
@@ -719,7 +727,7 @@ export const SelectTool: ToolHandlers = {
 
     if (mode === 'furnitureResize' && dragState?.kind === 'furnitureResize') {
       const { project } = useProjectStore.getState()
-      const f = project.furnitureInstances.find((ff) => ff.id === dragState.id)
+      const f = activeFurnitureInstances(project).find((ff) => ff.id === dragState.id)
       const moved = f
         ? f.x !== dragState.currentX ||
           f.y !== dragState.currentY ||
@@ -743,7 +751,7 @@ export const SelectTool: ToolHandlers = {
 
     if (mode === 'furnitureRotate' && dragState?.kind === 'furnitureRotate') {
       const { project } = useProjectStore.getState()
-      const f = project.furnitureInstances.find((ff) => ff.id === dragState.id)
+      const f = activeFurnitureInstances(project).find((ff) => ff.id === dragState.id)
       const moved = f ? f.rotation !== dragState.currentRotation : false
       if (f && moved) {
         useHistoryStore.getState().pushSnapshot(project)
@@ -789,7 +797,7 @@ export const SelectTool: ToolHandlers = {
   // tracking the cursor.
   wantsRawPointer() {
     const { selectedIds } = useUIStore.getState()
-    const { furnitureInstances } = useProjectStore.getState().project
+    const furnitureInstances = activeFurnitureInstances(useProjectStore.getState().project)
     return furnitureInstances.some((f) => selectedIds.includes(f.id))
   },
 }

@@ -1,0 +1,7 @@
+/* Same canvas container behavior as the editable canvas (LayoutCanvas), minus
+ * the cursor: a read-only pane is a click target for "edit this layout", so it
+ * takes the pointer cursor its wrapper sets in LayoutWorkspace.module.css. */
+.container {
+  composes: container from './LayoutCanvas.module.css';
+  cursor: inherit;
+}

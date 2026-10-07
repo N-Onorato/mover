@@ -11,6 +11,7 @@ import {
   resetPatch,
 } from '../furniture/catalog'
 import { findPiece } from '../furniture/resolve'
+import { activeFurnitureInstances } from '../project/layouts'
 import { useLibraryStore } from '../store/libraryStore'
 import { SaveToSetDialog } from './SaveToSetDialog'
 import type { Room, InteriorWall, FurnitureInstance, ReferenceImage } from '../types/project'
@@ -399,7 +400,7 @@ export function PropertiesPanel() {
   const selectedWall = useUIStore((s) => s.selectedWall)
   const rooms = useProjectStore((s) => s.project.rooms)
   const interiorWalls = useProjectStore((s) => s.project.interiorWalls)
-  const furnitureInstances = useProjectStore((s) => s.project.furnitureInstances)
+  const furnitureInstances = useProjectStore((s) => activeFurnitureInstances(s.project))
   const referenceImages = useProjectStore((s) => s.project.referenceImages)
 
   const selectedRoom =

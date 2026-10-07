@@ -3,6 +3,18 @@ export interface Point {
   y: number
 }
 
+/** Current on-disk schema version, written by every save.
+ *
+ * 1.1 (L1) replaced the flat `Project.furnitureInstances` array with
+ * `furnitureLayouts` + `activeFurnitureLayoutId`. The bump is what makes an
+ * older build refuse a newer file outright ("Unsupported project version")
+ * instead of opening it and silently showing no furniture. */
+export const PROJECT_VERSION = '1.1'
+
+/** Versions `parseProject` accepts. Older entries are migrated forward on
+ * load (io/load.ts) and re-saved as PROJECT_VERSION. */
+export const SUPPORTED_PROJECT_VERSIONS: readonly string[] = ['1.0', PROJECT_VERSION]
+
 export interface Project {
   version: string
   id: string
@@ -12,11 +24,30 @@ export interface Project {
   settings: ProjectSettings
   rooms: Room[]
   interiorWalls: InteriorWall[]
-  furnitureInstances: FurnitureInstance[]
+  /** Furniture arrangements over the shared room shell. Always at least one -
+   * the store refuses to delete the last, and load.ts backfills a default
+   * from a pre-1.1 flat `furnitureInstances` array. */
+  furnitureLayouts: FurnitureLayout[]
+  /** Which layout is rendered on the main canvas and edited by the tools.
+   * A dangling id falls back to the first layout (see project/layouts.ts). */
+  activeFurnitureLayoutId: string
   customFurnitureDefs: FurnitureDefinition[]
   furnitureSets: FurnitureSet[]
   referenceImages: ReferenceImage[]
   annotations: Annotation[]
+}
+
+/** L1 (#28): one named furniture arrangement - a "variant" of the plan.
+ *
+ * Layouts hold furniture only. Rooms, interior walls, reference images and
+ * annotations stay on the Project and are shared by every layout, because the
+ * point of the feature is trying different arrangements *of the same space*:
+ * a variant that could also move the walls would be a separate project, not a
+ * comparable alternative. */
+export interface FurnitureLayout {
+  id: string
+  name: string
+  furnitureInstances: FurnitureInstance[]
 }
 
 export interface ProjectSettings {

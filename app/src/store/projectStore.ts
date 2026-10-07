@@ -5,10 +5,18 @@ import type {
   Room,
   InteriorWall,
   FurnitureInstance,
+  FurnitureLayout,
   FurnitureDefinition,
   ReferenceImage,
   Annotation,
 } from '../types/project'
+import { PROJECT_VERSION } from '../types/project'
+import {
+  DEFAULT_LAYOUT_NAME,
+  activeFurnitureLayout,
+  createFurnitureLayout,
+  mapActiveLayoutFurniture,
+} from '../project/layouts'
 
 // Length-valued settings (defaultWallThickness, room dimensions, etc.) are
 // always stored in the project's native world unit: inches when
@@ -21,8 +29,9 @@ import type {
 const DEFAULT_WALL_THICKNESS_IMPERIAL_IN = 4.5
 
 function newProject(): Project {
+  const layout = createFurnitureLayout(DEFAULT_LAYOUT_NAME)
   return {
-    version: '1.0',
+    version: PROJECT_VERSION,
     id: crypto.randomUUID(),
     name: 'Untitled Layout',
     created: new Date().toISOString(),
@@ -38,7 +47,8 @@ function newProject(): Project {
     },
     rooms: [],
     interiorWalls: [],
-    furnitureInstances: [],
+    furnitureLayouts: [layout],
+    activeFurnitureLayoutId: layout.id,
     customFurnitureDefs: [],
     furnitureSets: [],
     referenceImages: [],
@@ -67,9 +77,23 @@ interface ProjectStore {
   updateInteriorWall: (id: string, patch: Partial<InteriorWall>) => void
   removeInteriorWall: (id: string) => void
 
+  // Furniture actions all target the *active* layout (project/layouts.ts).
+  // Nothing in the app edits a non-active layout's furniture: to change a
+  // layout you switch to it first, which is what the tabs do.
   addFurniture: (instance: FurnitureInstance) => void
   updateFurniture: (id: string, patch: Partial<FurnitureInstance>) => void
   removeFurniture: (id: string) => void
+
+  /** Appends the layout and switches to it - creating a variant you aren't
+   * then editing isn't a flow the UI has, and splitting it in two would make
+   * "new tab" two store updates (and two autosaves). */
+  addFurnitureLayout: (layout: FurnitureLayout) => void
+  renameFurnitureLayout: (id: string, name: string) => void
+  /** No-op when `id` names the last remaining layout: a project always has at
+   * least one furniture layout, so there is always something to render and
+   * place into. Removing the active layout activates a neighbour. */
+  removeFurnitureLayout: (id: string) => void
+  setActiveFurnitureLayout: (id: string) => void
 
   addCustomDef: (def: FurnitureDefinition) => void
   updateCustomDef: (id: string, patch: Partial<FurnitureDefinition>) => void
@@ -140,7 +164,16 @@ export const useProjectStore = create<ProjectStore>((set) => ({
           interiorWalls: s.project.interiorWalls.filter(
             (w) => !idSet.has(w.id) && !removedRoomIds.has(w.roomId),
           ),
-          furnitureInstances: s.project.furnitureInstances.filter((f) => !idSet.has(f.id)),
+          // Selection can only hold ids from the active layout, but this
+          // sweeps every layout so an id that somehow outlived a switch can't
+          // leave an orphan behind. Layouts that lose nothing keep their exact
+          // object identity, so comparison panes don't re-render on a delete.
+          furnitureLayouts: s.project.furnitureLayouts.map((l) => {
+            const kept = l.furnitureInstances.filter((f) => !idSet.has(f.id))
+            return kept.length === l.furnitureInstances.length
+              ? l
+              : { ...l, furnitureInstances: kept }
+          }),
           annotations: s.project.annotations.filter((a) => !idSet.has(a.id)),
           referenceImages: s.project.referenceImages.filter((img) => !idSet.has(img.id)),
         },
@@ -197,7 +230,7 @@ export const useProjectStore = create<ProjectStore>((set) => ({
     set((s) => ({
       project: {
         ...s.project,
-        furnitureInstances: [...s.project.furnitureInstances, instance],
+        furnitureLayouts: mapActiveLayoutFurniture(s.project, (fs) => [...fs, instance]),
       },
       isDirty: true,
     })),
@@ -205,8 +238,8 @@ export const useProjectStore = create<ProjectStore>((set) => ({
     set((s) => ({
       project: {
         ...s.project,
-        furnitureInstances: s.project.furnitureInstances.map((f) =>
-          f.id === id ? { ...f, ...patch } : f,
+        furnitureLayouts: mapActiveLayoutFurniture(s.project, (fs) =>
+          fs.map((f) => (f.id === id ? { ...f, ...patch } : f)),
         ),
       },
       isDirty: true,
@@ -215,10 +248,57 @@ export const useProjectStore = create<ProjectStore>((set) => ({
     set((s) => ({
       project: {
         ...s.project,
-        furnitureInstances: s.project.furnitureInstances.filter((f) => f.id !== id),
+        furnitureLayouts: mapActiveLayoutFurniture(s.project, (fs) =>
+          fs.filter((f) => f.id !== id),
+        ),
       },
       isDirty: true,
     })),
+
+  addFurnitureLayout: (layout) =>
+    set((s) => ({
+      project: {
+        ...s.project,
+        furnitureLayouts: [...s.project.furnitureLayouts, layout],
+        activeFurnitureLayoutId: layout.id,
+      },
+      isDirty: true,
+    })),
+  renameFurnitureLayout: (id, name) =>
+    set((s) => ({
+      project: {
+        ...s.project,
+        furnitureLayouts: s.project.furnitureLayouts.map((l) =>
+          l.id === id ? { ...l, name: name.trim() || l.name } : l,
+        ),
+      },
+      isDirty: true,
+    })),
+  removeFurnitureLayout: (id) =>
+    set((s) => {
+      const remaining = s.project.furnitureLayouts.filter((l) => l.id !== id)
+      if (remaining.length === 0 || remaining.length === s.project.furnitureLayouts.length) {
+        return s
+      }
+      // Resolve the active layout *before* the removal so deleting a
+      // non-active layout can't shift what the user is editing, and deleting
+      // the active one lands on a real neighbour rather than a dangling id.
+      const activeId = activeFurnitureLayout(s.project)?.id
+      return {
+        project: {
+          ...s.project,
+          furnitureLayouts: remaining,
+          activeFurnitureLayoutId: activeId === id ? remaining[0].id : (activeId ?? remaining[0].id),
+        },
+        isDirty: true,
+      }
+    }),
+  setActiveFurnitureLayout: (id) =>
+    set((s) =>
+      s.project.furnitureLayouts.some((l) => l.id === id)
+        ? { project: { ...s.project, activeFurnitureLayoutId: id }, isDirty: true }
+        : s,
+    ),
 
   addCustomDef: (def) =>
     set((s) => ({
