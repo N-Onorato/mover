@@ -8,6 +8,7 @@ import { PropertiesPanel } from './components/PropertiesPanel'
 import { StatusBar } from './components/StatusBar'
 import { SettingsPanel } from './components/SettingsPanel'
 import { CalibrationLengthDialog } from './components/CalibrationLengthDialog'
+import { ExportPngDialog } from './components/ExportPngDialog'
 import { MobileDrawer } from './components/MobileDrawer'
 import { ShortcutSheet } from './components/ShortcutSheet'
 import { LayoutWorkspace } from './canvas/LayoutWorkspace'
@@ -128,6 +129,7 @@ export default function App() {
       <StatusBar />
       {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
       <CalibrationLengthDialog />
+      <ExportPngDialog />
       {!isCoarsePointer && (
         <ShortcutSheet open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
       )}

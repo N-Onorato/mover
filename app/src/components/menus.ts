@@ -5,8 +5,7 @@ import { useHistoryStore } from '../store/historyStore'
 import { downloadProject } from '../io/save'
 import { openProjectFile, LoadError } from '../io/load'
 import { embedLibrary } from '../furniture/library'
-import { exportStageToPng } from '../io/exportPng'
-import { getStage } from '../canvas/stageRegistry'
+import { openExportPngDialog } from './exportPngDialogStore'
 import { startImageImport } from '../canvas/tools/ImageTool'
 import { activeFurnitureInstances } from '../project/layouts'
 import type { ShortcutId } from '../keyboard/shortcuts'
@@ -46,13 +45,10 @@ function handleSave() {
   useProjectStore.getState().markSaved()
 }
 
+/** O5 (#45): opens the Export PNG dialog (options, preview, download) rather
+ * than downloading the live viewport straight away. */
 function handleExportPng() {
-  const stage = getStage()
-  if (!stage) {
-    window.alert('Canvas is not ready yet. Please try again in a moment.')
-    return
-  }
-  exportStageToPng(stage)
+  openExportPngDialog()
 }
 
 // A restored snapshot may not contain what was selected - the entities may
