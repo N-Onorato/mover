@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useUIStore } from '../store/uiStore'
 import { useProjectStore } from '../store/projectStore'
+import type { SquareRoomsOutcome } from '../store/projectStore'
 import { useHistoryStore } from '../store/historyStore'
 import { distance, polygonBoundingBox } from '../utils/geometry'
 import { formatLength, parseLength } from '../utils/units'
@@ -116,6 +117,67 @@ function WallProperties({ room, edgeIndex }: { room: Room; edgeIndex: number }) 
   )
 }
 
+/** O3 (#43): what to tell the user after "Square corners". Refusals and
+ * partial results are worded as warnings; "nothing to do" is plain info. */
+function describeSquareOutcome(
+  outcome: SquareRoomsOutcome,
+  toleranceDeg: number,
+): { text: string; warn: boolean } {
+  const { squared, unchanged, refused, skippedWalls } = outcome
+  if (squared === 0 && refused.length > 0) {
+    return { text: `Could not square: ${refused[0].reason}`, warn: true }
+  }
+  if (squared === 0) {
+    return {
+      text: `Nothing to change: corners are already square, or off by more than ${toleranceDeg} degrees.`,
+      warn: false,
+    }
+  }
+  const parts = [squared === 1 ? 'Squared 1 room.' : `Squared ${squared} rooms.`]
+  if (unchanged > 0) parts.push(`${unchanged} already square.`)
+  if (refused.length > 0) {
+    parts.push(`${refused.length} skipped: ${refused[0].reason}`)
+  }
+  if (skippedWalls > 0) {
+    parts.push(
+      skippedWalls === 1
+        ? '1 interior wall could not be aligned without detaching it.'
+        : `${skippedWalls} interior walls could not be aligned without detaching them.`,
+    )
+  }
+  return { text: parts.join(' '), warn: refused.length > 0 || skippedWalls > 0 }
+}
+
+/** O3 (#43): the "Square corners" button and its result line. Mounted with a
+ * `key` of the selected room ids, so the message disappears when the selection
+ * changes. */
+function SquareCornersControl({ roomIds }: { roomIds: string[] }) {
+  const toleranceDeg = useProjectStore((s) => s.project.settings.squareCornersToleranceDeg)
+  const squareRooms = useProjectStore((s) => s.squareRooms)
+  const [message, setMessage] = useState<{ text: string; warn: boolean } | null>(null)
+
+  return (
+    <>
+      <button
+        className={styles.button}
+        onClick={() => setMessage(describeSquareOutcome(squareRooms(roomIds), toleranceDeg))}
+      >
+        Square corners
+      </button>
+      {message ? (
+        <div className={message.warn ? styles.messageWarn : styles.message} role="status">
+          {message.text}
+        </div>
+      ) : (
+        <div className={styles.hint}>
+          Snaps corners and interior walls within {toleranceDeg} degrees of square to exact right angles.
+          Set the tolerance in Project Settings.
+        </div>
+      )}
+    </>
+  )
+}
+
 function RoomProperties({ room }: { room: Room }) {
   const units = useProjectStore((s) => s.project.settings.units)
   const updateRoom = useProjectStore((s) => s.updateRoom)
@@ -163,6 +225,7 @@ function RoomProperties({ room }: { room: Room }) {
         onCommit={commitWallThickness}
       />
       <div className={styles.hint}>{formatLength(room.wallThickness, units)} (overrides project default)</div>
+      <SquareCornersControl key={room.id} roomIds={[room.id]} />
     </div>
   )
 }
@@ -403,6 +466,10 @@ export function PropertiesPanel() {
   const furnitureInstances = useProjectStore((s) => activeFurnitureInstances(s.project))
   const referenceImages = useProjectStore((s) => s.project.referenceImages)
 
+  // O3 (#43): a multi-selection that includes several rooms can square them
+  // all at once (one undo step).
+  const selectedRoomIds = selectedIds.filter((id) => rooms.some((r) => r.id === id))
+
   const selectedRoom =
     selectedIds.length === 1 ? rooms.find((r) => r.id === selectedIds[0]) : undefined
   const selectedWallEntity =
@@ -431,6 +498,12 @@ export function PropertiesPanel() {
               ? 'Nothing selected'
               : `${selectedIds.length} item(s) selected`}
           </p>
+        )}
+        {selectedRoomIds.length > 1 && (
+          <div className={styles.section}>
+            <div className={styles.sectionTitle}>{selectedRoomIds.length} Rooms</div>
+            <SquareCornersControl key={selectedRoomIds.join(',')} roomIds={selectedRoomIds} />
+          </div>
         )}
         {selectedWallEntity && <InteriorWallProperties wall={selectedWallEntity} />}
         {selectedRoom && selectedWall && selectedWall.roomId === selectedRoom.id && (

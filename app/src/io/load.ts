@@ -1,6 +1,7 @@
 import type { FurnitureLayout, Project } from '../types/project'
 import { PROJECT_VERSION, SUPPORTED_PROJECT_VERSIONS } from '../types/project'
 import { DEFAULT_LAYOUT_NAME, createFurnitureLayout } from '../project/layouts'
+import { DEFAULT_SQUARE_CORNERS_TOLERANCE_DEG } from '../utils/squareCorners'
 
 export class LoadError extends Error {}
 
@@ -18,6 +19,12 @@ const SETTINGS_MIGRATIONS: SettingsMigration[] = [
     // Matches DEFAULT_WALL_THICKNESS_IMPERIAL_IN in store/projectStore.ts
     // (the US standard 2x4 wall thickness), introduced in E2.
     if (settings.defaultWallThickness === undefined) settings.defaultWallThickness = 4.5
+  },
+  (settings) => {
+    // O3 (#43): tolerance for "Square corners". Same default newProject() uses.
+    if (settings.squareCornersToleranceDeg === undefined) {
+      settings.squareCornersToleranceDeg = DEFAULT_SQUARE_CORNERS_TOLERANCE_DEG
+    }
   },
 ]
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { useProjectStore } from './projectStore'
+import { useHistoryStore } from './historyStore'
 import { activeFurnitureInstances } from '../project/layouts'
 import { findDefinition, resetPatch } from '../furniture/catalog'
 import type { FurnitureInstance, InteriorWall, Room } from '../types/project'
@@ -222,5 +223,102 @@ describe('furniture layouts (L1, #28)', () => {
     const { furnitureLayouts } = useProjectStore.getState().project
     expect(furnitureLayouts[0].furnitureInstances).toEqual([])
     expect(furnitureLayouts[1]).toBe(other)
+  })
+})
+
+describe('squareRooms (O3, #43)', () => {
+  const skewedPoints = [
+    { x: 0, y: 0 },
+    { x: 240, y: 4 },
+    { x: 244, y: 184 },
+    { x: 4, y: 180 },
+  ]
+
+  function setup(rooms: Room[], walls: InteriorWall[] = [], tol = 5) {
+    useHistoryStore.getState().clear()
+    useProjectStore.setState((s) => ({
+      project: {
+        ...s.project,
+        rooms,
+        interiorWalls: walls,
+        settings: { ...s.project.settings, squareCornersToleranceDeg: tol },
+      },
+    }))
+  }
+
+  it('defaults the tolerance setting for new projects', () => {
+    useProjectStore.getState().resetProject()
+    expect(useProjectStore.getState().project.settings.squareCornersToleranceDeg).toBe(5)
+  })
+
+  it('squares every given room and interior wall in one undo step', () => {
+    setup(
+      [
+        makeRoom({ id: 'a', points: skewedPoints }),
+        makeRoom({ id: 'b', points: skewedPoints.map((p) => ({ x: p.x + 500, y: p.y })) }),
+      ],
+      [makeInteriorWall({ id: 'w', roomId: 'a', a: { x: 100, y: 100 }, b: { x: 140, y: 103 } })],
+    )
+
+    const outcome = useProjectStore.getState().squareRooms(['a', 'b'])
+
+    expect(outcome).toMatchObject({ squared: 2, unchanged: 0, refused: [], skippedWalls: 0 })
+    const { rooms, interiorWalls } = useProjectStore.getState().project
+    for (const r of rooms) {
+      // Top wall is exactly perpendicular to the right wall.
+      const top = { x: r.points[1].x - r.points[0].x, y: r.points[1].y - r.points[0].y }
+      const right = { x: r.points[2].x - r.points[1].x, y: r.points[2].y - r.points[1].y }
+      expect(top.x * right.x + top.y * right.y).toBeCloseTo(0, 6)
+    }
+    expect(interiorWalls[0].a).not.toEqual({ x: 100, y: 100 })
+    // One snapshot for the whole operation, holding the pre-squaring project.
+    const { past } = useHistoryStore.getState()
+    expect(past).toHaveLength(1)
+    expect(past[0].rooms[0].points).toEqual(skewedPoints)
+  })
+
+  it('takes no history snapshot when nothing changes', () => {
+    setup([makeRoom({ id: 'a' })])
+
+    const outcome = useProjectStore.getState().squareRooms(['a'])
+
+    expect(outcome).toMatchObject({ squared: 0, unchanged: 1 })
+    expect(useHistoryStore.getState().past).toHaveLength(0)
+  })
+
+  it('leaves a refused room untouched and still squares the others', () => {
+    const degenerate = makeRoom({
+      id: 'bad',
+      points: [
+        { x: 0, y: 0 },
+        { x: 100, y: 0 },
+        { x: 100, y: 0 },
+        { x: 100, y: 100 },
+      ],
+    })
+    setup([degenerate, makeRoom({ id: 'ok', points: skewedPoints })])
+
+    const outcome = useProjectStore.getState().squareRooms(['bad', 'ok'])
+
+    expect(outcome.squared).toBe(1)
+    expect(outcome.refused.map((r) => r.roomId)).toEqual(['bad'])
+    const rooms = useProjectStore.getState().project.rooms
+    expect(rooms[0].points).toEqual(degenerate.points)
+    expect(rooms[1].points).not.toEqual(skewedPoints)
+  })
+
+  it('does not snapshot when the only room is refused', () => {
+    setup([makeRoom({ id: 'bad', points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] })])
+
+    const outcome = useProjectStore.getState().squareRooms(['bad'])
+
+    expect(outcome.refused).toHaveLength(1)
+    expect(useHistoryStore.getState().past).toHaveLength(0)
+  })
+
+  it('uses the project tolerance', () => {
+    setup([makeRoom({ id: 'a', points: skewedPoints })], [], 0.5)
+
+    expect(useProjectStore.getState().squareRooms(['a']).squared).toBe(0)
   })
 })

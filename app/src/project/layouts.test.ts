@@ -44,6 +44,7 @@ function makeProject(layouts: FurnitureLayout[], activeId = layouts[0]?.id ?? ''
       defaultWallThickness: 4.5,
       backgroundColor: '#f5f5f0',
       rulerMode: 'feet-inches',
+      squareCornersToleranceDeg: 5,
     },
     rooms: [],
     interiorWalls: [],

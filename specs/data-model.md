@@ -38,6 +38,7 @@ interface ProjectSettings {
   snapToWalls: boolean
   defaultWallThickness: number   // in units
   backgroundColor: string        // CSS color
+  squareCornersToleranceDeg: number  // degrees (default 5, 0-20); "Square corners" snaps edges/corners within this of 90
 }
 ```
 
