@@ -57,6 +57,16 @@ describe('parseProject', () => {
     expect(project.settings.defaultWallThickness).toBe(4.5)
   })
 
+  it('backfills squareCornersToleranceDeg when missing (pre-O3 saved projects)', () => {
+    const project = parseProject(JSON.stringify(baseProject()))
+    expect(project.settings.squareCornersToleranceDeg).toBe(5)
+  })
+
+  it('keeps a saved squareCornersToleranceDeg', () => {
+    const project = parseProject(JSON.stringify(baseProject({ squareCornersToleranceDeg: 2.5 })))
+    expect(project.settings.squareCornersToleranceDeg).toBe(2.5)
+  })
+
   it('leaves existing settings fields untouched', () => {
     const project = parseProject(
       JSON.stringify(baseProject({ rulerMode: 'simple', defaultWallThickness: 6 })),

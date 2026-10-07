@@ -11,6 +11,8 @@ import type {
   Annotation,
 } from '../types/project'
 import { PROJECT_VERSION } from '../types/project'
+import { useHistoryStore } from './historyStore'
+import { DEFAULT_SQUARE_CORNERS_TOLERANCE_DEG, squareRoom } from '../utils/squareCorners'
 import {
   DEFAULT_LAYOUT_NAME,
   activeFurnitureLayout,
@@ -44,6 +46,7 @@ function newProject(): Project {
       defaultWallThickness: DEFAULT_WALL_THICKNESS_IMPERIAL_IN,
       backgroundColor: '#f5f5f0',
       rulerMode: 'feet-inches',
+      squareCornersToleranceDeg: DEFAULT_SQUARE_CORNERS_TOLERANCE_DEG,
     },
     rooms: [],
     interiorWalls: [],
@@ -54,6 +57,18 @@ function newProject(): Project {
     referenceImages: [],
     annotations: [],
   }
+}
+
+/** O3 (#43): what `squareRooms` did, so the caller can tell the user. */
+export interface SquareRoomsOutcome {
+  /** Rooms whose geometry changed. */
+  squared: number
+  /** Rooms that were already square (or had nothing within tolerance). */
+  unchanged: number
+  /** Rooms the operation refused, with the reason for each. */
+  refused: { roomId: string; reason: string }[]
+  /** Interior walls within tolerance that could not be made exactly axis-aligned. */
+  skippedWalls: number
 }
 
 interface ProjectStore {
@@ -72,6 +87,12 @@ interface ProjectStore {
   addRoom: (room: Room) => void
   updateRoom: (id: string, patch: Partial<Room>) => void
   removeRoom: (id: string) => void
+  /** O3 (#43): squares the given rooms and their interior walls using
+   * settings.squareCornersToleranceDeg. Pushes one history snapshot if (and
+   * only if) something changed, so a multi-room call is one undo step and a
+   * no-op leaves no empty undo entry. A refused room is left untouched while
+   * the others still apply. */
+  squareRooms: (ids: string[]) => SquareRoomsOutcome
 
   addInteriorWall: (wall: InteriorWall) => void
   updateInteriorWall: (id: string, patch: Partial<InteriorWall>) => void
@@ -203,6 +224,45 @@ export const useProjectStore = create<ProjectStore>((set) => ({
       },
       isDirty: true,
     })),
+  squareRooms: (ids) => {
+    const { project } = useProjectStore.getState()
+    const tol = project.settings.squareCornersToleranceDeg
+    const outcome: SquareRoomsOutcome = { squared: 0, unchanged: 0, refused: [], skippedWalls: 0 }
+    const newPoints = new Map<string, Room['points']>()
+    const newWalls = new Map<string, InteriorWall>()
+    for (const id of new Set(ids)) {
+      const room = project.rooms.find((r) => r.id === id)
+      if (!room) continue
+      const walls = project.interiorWalls.filter((w) => w.roomId === id)
+      const result = squareRoom(room.points, walls, tol)
+      if (!result.ok) {
+        outcome.refused.push({ roomId: id, reason: result.reason })
+        continue
+      }
+      if (!result.changed) {
+        outcome.unchanged++
+        continue
+      }
+      outcome.squared++
+      outcome.skippedWalls += result.skippedWalls
+      newPoints.set(id, result.points)
+      for (const w of result.walls) newWalls.set(w.id, w)
+    }
+    if (outcome.squared === 0) return outcome
+    useHistoryStore.getState().pushSnapshot(project)
+    set((s) => ({
+      project: {
+        ...s.project,
+        rooms: s.project.rooms.map((r) => {
+          const points = newPoints.get(r.id)
+          return points ? { ...r, points } : r
+        }),
+        interiorWalls: s.project.interiorWalls.map((w) => newWalls.get(w.id) ?? w),
+      },
+      isDirty: true,
+    }))
+    return outcome
+  },
 
   addInteriorWall: (wall) =>
     set((s) => ({

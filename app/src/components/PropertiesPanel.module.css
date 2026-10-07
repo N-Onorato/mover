@@ -103,3 +103,17 @@
   opacity: 0.45;
   cursor: default;
 }
+
+/* O3 (#43): result of "Square corners" - short status line under the button.
+ * .messageWarn is for refusals and partial results, .message for plain info. */
+.message {
+  font-size: 11px;
+  color: #9ab;
+  margin-bottom: 10px;
+}
+
+.messageWarn {
+  font-size: 11px;
+  color: #e3a85d;
+  margin-bottom: 10px;
+}
