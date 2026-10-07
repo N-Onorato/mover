@@ -58,6 +58,11 @@ export interface ProjectSettings {
   defaultWallThickness: number
   backgroundColor: string
   rulerMode: 'feet-inches' | 'simple'
+  /** O3 (#43): "Square corners" snaps room edges and interior walls within this
+   * many degrees of the room's axes (so corners within 90 +/- this). Degrees,
+   * not a world length, so it is unaffected by `units`. Older files without
+   * it load with DEFAULT_SQUARE_CORNERS_TOLERANCE_DEG (io/load.ts). */
+  squareCornersToleranceDeg: number
 }
 
 export interface Room {

@@ -4,6 +4,7 @@ import { useProjectStore } from '../../store/projectStore'
 import { useUIStore } from '../../store/uiStore'
 import { polygonBoundingBox } from '../../utils/geometry'
 import { WallLengthLabel } from '../WallLengthLabel'
+import { rotatePoints } from '../tools/multiRotate'
 import type { Point, Room } from '../../types/project'
 import type { UnitSystem } from '../../utils/units'
 
@@ -64,11 +65,19 @@ function RoomShape({ room, pixelsPerUnit, units, showWallLabels }: RoomShapeProp
     s.dragState?.kind === 'multi' && s.dragState.roomIds.includes(room.id) ? s.dragState.dy : 0,
   )
 
+  // O7 (#47): the multi-rotate drag this room is part of, if any. Same F1
+  // rule as above - rooms outside the selection see a constant null.
+  const rotateDrag = useUIStore((s) =>
+    s.dragState?.kind === 'multiRotate' && s.dragState.roomIds.includes(room.id) ? s.dragState : null,
+  )
+
   const effectivePoints: Point[] = wallVertexPoints
     ? wallVertexPoints
-    : dx !== 0 || dy !== 0
-      ? room.points.map((p) => ({ x: p.x + dx, y: p.y + dy }))
-      : room.points
+    : rotateDrag
+      ? rotatePoints(room.points, rotateDrag.pivot, rotateDrag.delta)
+      : dx !== 0 || dy !== 0
+        ? room.points.map((p) => ({ x: p.x + dx, y: p.y + dy }))
+        : room.points
 
   const flatPoints = effectivePoints.flatMap((p) => [p.x * pixelsPerUnit, p.y * pixelsPerUnit])
   const bb = polygonBoundingBox(effectivePoints)

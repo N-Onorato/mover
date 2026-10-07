@@ -2,6 +2,7 @@ import { Fragment } from 'react'
 import { Layer, Rect, Text } from 'react-konva'
 import { useProjectStore } from '../../store/projectStore'
 import { useUIStore } from '../../store/uiStore'
+import { rotateFurniture } from '../tools/multiRotate'
 import { activeFurnitureLayout, activeFurnitureInstances, layoutFurniture } from '../../project/layouts'
 
 interface Props {
@@ -48,6 +49,12 @@ export function FurnitureLayer({ pixelsPerUnit: ppu, layoutId }: Props) {
         } else if (dragState?.kind === 'multi' && dragState.furnitureIds.includes(f.id)) {
           x = f.x + dragState.dx
           y = f.y + dragState.dy
+        } else if (dragState?.kind === 'multiRotate' && dragState.furnitureIds.includes(f.id)) {
+          // O7 (#47): rigid rotation of the selection about its pivot.
+          const rotated = rotateFurniture(f, dragState.pivot, dragState.delta)
+          x = rotated.x
+          y = rotated.y
+          rotation = rotated.rotation
         }
 
         const cx = (x + width / 2) * ppu
