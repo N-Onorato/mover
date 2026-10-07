@@ -1,219 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useUIStore } from '../store/uiStore'
 import { useProjectStore } from '../store/projectStore'
-import { useLibraryStore } from '../store/libraryStore'
-import { useUIStore, DEFAULT_VIEW } from '../store/uiStore'
 import { useHistoryStore } from '../store/historyStore'
-import { downloadProject } from '../io/save'
-import { openProjectFile, LoadError } from '../io/load'
-import { embedLibrary } from '../furniture/library'
-import { exportStageToPng } from '../io/exportPng'
-import { getStage } from '../canvas/stageRegistry'
-import { startImageImport } from '../canvas/tools/ImageTool'
-import { activeFurnitureInstances } from '../project/layouts'
+import { formatShortcut, isTypingTarget, matchesShortcut } from '../keyboard/shortcuts'
+import { buildMenus } from './menus'
 import styles from './MenuBar.module.css'
-
-const isMac = typeof navigator !== 'undefined' && /Mac/.test(navigator.platform)
-const modKey = isMac ? '⌘' : 'Ctrl'
-
-function handleNew() {
-  const { isDirty } = useProjectStore.getState()
-  if (isDirty && !window.confirm('Discard unsaved changes and start a new layout?')) return
-  useProjectStore.getState().resetProject()
-  useHistoryStore.getState().clear()
-}
-
-function handleOpen() {
-  const { isDirty } = useProjectStore.getState()
-  if (isDirty && !window.confirm('Discard unsaved changes and open a different file?')) return
-  openProjectFile()
-    .then((project) => {
-      useProjectStore.getState().setProject(project)
-      // Pieces saved inside the file join this browser's library; entries it
-      // already has win, so re-opening a file can't duplicate a set.
-      useLibraryStore.getState().mergeFromProject(project)
-      useHistoryStore.getState().clear()
-    })
-    .catch((e) => {
-      if (e instanceof LoadError) window.alert(e.message)
-    })
-}
-
-function handleSave() {
-  const { project } = useProjectStore.getState()
-  // The saved file carries a copy of the furniture library so the sets travel
-  // with it; see furniture/library.ts.
-  downloadProject(embedLibrary(project, useLibraryStore.getState().library))
-  useProjectStore.getState().markSaved()
-}
-
-function handleExportPng() {
-  const stage = getStage()
-  if (!stage) {
-    window.alert('Canvas is not ready yet. Please try again in a moment.')
-    return
-  }
-  exportStageToPng(stage)
-}
-
-// A restored snapshot may not contain what was selected - the entities may
-// have been deleted, or (L1) belong to a furniture layout that isn't the
-// restored active one. Dropping the selection keeps the properties panel and
-// the delete action pointed only at what is actually on the canvas.
-function handleUndo() {
-  const { project } = useProjectStore.getState()
-  const previous = useHistoryStore.getState().undo(project)
-  if (!previous) return
-  useUIStore.getState().clearSelection()
-  useProjectStore.getState().applySnapshot(previous)
-}
-
-function handleRedo() {
-  const { project } = useProjectStore.getState()
-  const next = useHistoryStore.getState().redo(project)
-  if (!next) return
-  useUIStore.getState().clearSelection()
-  useProjectStore.getState().applySnapshot(next)
-}
-
-function handleSelectAll() {
-  const { lockedLayers, setSelection } = useUIStore.getState()
-  const { project } = useProjectStore.getState()
-  const ids = [
-    ...(lockedLayers.rooms ? [] : project.rooms.map((r) => r.id)),
-    ...(lockedLayers.furniture ? [] : activeFurnitureInstances(project).map((f) => f.id)),
-    ...(lockedLayers.annotations ? [] : project.annotations.map((a) => a.id)),
-    ...(lockedLayers.referenceImages ? [] : project.referenceImages.map((img) => img.id)),
-  ]
-  setSelection(ids)
-}
-
-function handleDeleteSelected() {
-  const { selectedIds, clearSelection } = useUIStore.getState()
-  if (selectedIds.length === 0) return
-  const { project, removeEntities } = useProjectStore.getState()
-  useHistoryStore.getState().pushSnapshot(project)
-  removeEntities(selectedIds)
-  clearSelection()
-}
-
-interface MenuEntry {
-  label: string
-  shortcut?: string
-  disabled?: boolean
-  checked?: boolean
-  onSelect?: () => void
-}
-
-type MenuSpec = { label: string; entries: (MenuEntry | 'separator')[] }
-
-interface MenuState {
-  showGrid: boolean
-  snapToGrid: boolean
-  units: 'imperial' | 'metric'
-  rulerMode: 'feet-inches' | 'simple'
-  view: { x: number; y: number; scale: number }
-  hasSelection: boolean
-  canUndo: boolean
-  canRedo: boolean
-  onOpenSettings?: () => void
-}
-
-function buildMenus({
-  showGrid,
-  snapToGrid,
-  units,
-  rulerMode,
-  view,
-  hasSelection,
-  canUndo,
-  canRedo,
-  onOpenSettings,
-}: MenuState): MenuSpec[] {
-  return [
-    {
-      label: 'File',
-      entries: [
-        { label: 'New Layout', onSelect: handleNew },
-        { label: 'Open...', onSelect: handleOpen },
-        'separator',
-        { label: 'Save', shortcut: `${modKey}+S`, onSelect: handleSave },
-        'separator',
-        { label: 'Import Reference Image...', onSelect: startImageImport },
-        'separator',
-        { label: 'Export as PNG', onSelect: handleExportPng },
-        { label: 'Export as SVG', disabled: true },
-        'separator',
-        { label: 'Project Settings...', onSelect: onOpenSettings },
-      ],
-    },
-    {
-      label: 'Edit',
-      entries: [
-        { label: 'Undo', shortcut: `${modKey}+Z`, disabled: !canUndo, onSelect: handleUndo },
-        { label: 'Redo', shortcut: `${modKey}+Shift+Z`, disabled: !canRedo, onSelect: handleRedo },
-        'separator',
-        {
-          label: 'Delete Selected',
-          shortcut: 'Del',
-          disabled: !hasSelection,
-          onSelect: handleDeleteSelected,
-        },
-        { label: 'Select All', shortcut: `${modKey}+A`, onSelect: handleSelectAll },
-        {
-          label: 'Deselect',
-          disabled: !hasSelection,
-          onSelect: () => useUIStore.getState().clearSelection(),
-        },
-      ],
-    },
-    {
-      label: 'View',
-      entries: [
-        {
-          label: 'Zoom In',
-          shortcut: `${modKey}+=`,
-          onSelect: () => useUIStore.getState().setView({ ...view, scale: Math.min(10, view.scale * 1.2) }),
-        },
-        {
-          label: 'Zoom Out',
-          shortcut: `${modKey}+-`,
-          onSelect: () => useUIStore.getState().setView({ ...view, scale: Math.max(0.1, view.scale / 1.2) }),
-        },
-        {
-          label: 'Reset Zoom',
-          shortcut: `${modKey}+0`,
-          onSelect: () => useUIStore.getState().setView(DEFAULT_VIEW),
-        },
-        'separator',
-        {
-          label: 'Show Grid',
-          checked: showGrid,
-          onSelect: () => useUIStore.getState().toggleGrid(),
-        },
-        {
-          label: 'Snap to Grid',
-          checked: snapToGrid,
-          onSelect: () => {
-            useHistoryStore.getState().pushSnapshot(useProjectStore.getState().project)
-            useProjectStore.getState().toggleSnapToGrid()
-          },
-        },
-        {
-          label: 'Feet/Inch Ruler',
-          checked: rulerMode === 'feet-inches',
-          disabled: units === 'metric',
-          onSelect: () => useProjectStore.getState().toggleRulerMode(),
-        },
-      ],
-    },
-  ]
-}
 
 interface MenuBarProps {
   onOpenSettings?: () => void
+  onOpenShortcuts?: () => void
 }
 
-export function MenuBar({ onOpenSettings }: MenuBarProps = {}) {
+export function MenuBar({ onOpenSettings, onOpenShortcuts }: MenuBarProps = {}) {
   const [openMenu, setOpenMenu] = useState<string | null>(null)
   const rootRef = useRef<HTMLDivElement>(null)
 
@@ -238,43 +36,51 @@ export function MenuBar({ onOpenSettings }: MenuBarProps = {}) {
         canUndo,
         canRedo,
         onOpenSettings,
+        onOpenShortcuts,
       }),
-    [showGrid, snapToGrid, units, rulerMode, view, hasSelection, canUndo, canRedo, onOpenSettings],
+    [
+      showGrid,
+      snapToGrid,
+      units,
+      rulerMode,
+      view,
+      hasSelection,
+      canUndo,
+      canRedo,
+      onOpenSettings,
+      onOpenShortcuts,
+    ],
   )
+  // Read by the keydown listener below, which is registered once - so the
+  // zoom entries act on the live view rather than the one at mount.
+  const menusRef = useRef(menus)
+  menusRef.current = menus
 
   useEffect(() => {
     function onDocClick(e: MouseEvent) {
       if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpenMenu(null)
     }
     function onKeyDown(e: KeyboardEvent) {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
+      if (isTypingTarget(e.target)) return
       if (e.key === 'Escape') {
         setOpenMenu(null)
         return
       }
-      const mod = e.ctrlKey || e.metaKey
-      if (!mod) {
-        if (e.key === 'Delete' || e.key === 'Backspace') {
-          // Some browsers treat Backspace outside an editable field as
-          // "navigate back" - preventDefault so it never fights with delete.
+      // Every menu shortcut is dispatched from the menu entries themselves,
+      // so an entry can't advertise a key that does nothing (#24). Disabled
+      // entries still swallow their key: Backspace outside a field would
+      // otherwise "navigate back" in some browsers, and Ctrl+S/Ctrl+= would
+      // fall through to the browser's own save/zoom.
+      for (const menu of menusRef.current) {
+        for (const entry of menu.entries) {
+          if (entry === 'separator' || !entry.shortcutId) continue
+          // The Help entry's '?' toggles the sheet; App owns that binding.
+          if (entry.shortcutId === 'help.shortcuts') continue
+          if (!matchesShortcut(e, entry.shortcutId)) continue
           e.preventDefault()
-          handleDeleteSelected()
+          if (!entry.disabled) entry.onSelect?.()
+          return
         }
-        return
-      }
-      const key = e.key.toLowerCase()
-      if (key === 'z' && !e.shiftKey) {
-        e.preventDefault()
-        handleUndo()
-      } else if ((key === 'z' && e.shiftKey) || key === 'y') {
-        e.preventDefault()
-        handleRedo()
-      } else if (key === 's') {
-        e.preventDefault()
-        handleSave()
-      } else if (key === 'a') {
-        e.preventDefault()
-        handleSelectAll()
       }
     }
     document.addEventListener('mousedown', onDocClick)
@@ -322,7 +128,9 @@ export function MenuBar({ onOpenSettings }: MenuBarProps = {}) {
                       )}
                       {entry.label}
                     </span>
-                    {entry.shortcut && <span className={styles.shortcut}>{entry.shortcut}</span>}
+                    {entry.shortcutId && (
+                      <span className={styles.shortcut}>{formatShortcut(entry.shortcutId)}</span>
+                    )}
                   </button>
                 ),
               )}

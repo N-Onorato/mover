@@ -1,0 +1,204 @@
+/* I5 (#24): keyboard-shortcut cheat sheet. Scrim and header chrome come
+ * from modal.module.css like the other dialogs; the rules below are the
+ * sheet's own layout plus its open/close motion. */
+
+.overlay {
+  composes: overlay from './modal.module.css';
+  /* Above the other modals (1000), so `?` works on top of Project Settings. */
+  z-index: 1100;
+  backdrop-filter: blur(2px);
+  animation: scrimIn 160ms ease-out both;
+}
+
+.sheet {
+  composes: modal from './modal.module.css';
+  width: min(680px, 92vw);
+  max-width: none;
+  max-height: 85vh;
+  overflow: hidden;
+  transform-origin: 50% 35%;
+  /* Slight overshoot so the card settles into place rather than stopping dead. */
+  animation: sheetIn 240ms cubic-bezier(0.2, 0.9, 0.3, 1.15) both;
+}
+
+.closing {
+  animation: scrimOut 150ms ease-in both;
+}
+
+.closing .sheet {
+  animation: sheetOut 140ms ease-in both;
+}
+
+.inner {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  outline: none;
+}
+
+.header {
+  composes: header from './modal.module.css';
+}
+
+.title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.closeButton {
+  composes: closeButton from './modal.module.css';
+}
+
+.body {
+  /* Columns rather than a grid so short groups (File) pack under each other
+   * instead of leaving a gap beside a long one. */
+  column-width: 260px;
+  column-gap: 24px;
+  padding: 14px 16px 0;
+  overflow-y: auto;
+}
+
+/* Categories cascade in one after another; --i is set per group inline. */
+.group {
+  break-inside: avoid;
+  padding-bottom: 14px;
+  animation: groupIn 260ms ease-out both;
+  animation-delay: calc(70ms + var(--i, 0) * 35ms);
+}
+
+.groupTitle {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #7c9cf5;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 0;
+  border-bottom: 1px solid #2c2c2c;
+  font-size: 12px;
+  color: #ccc;
+}
+
+.label {
+  min-width: 0;
+}
+
+.keys {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.combo {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.plus,
+.or {
+  font-size: 10px;
+  color: #666;
+}
+
+.or {
+  margin: 0 2px;
+}
+
+.key {
+  display: inline-block;
+  min-width: 20px;
+  padding: 1px 6px;
+  background: #1a1a1a;
+  border: 1px solid #444;
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  font: 11px/16px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: #ddd;
+  text-align: center;
+}
+
+/* Pointer actions (Drag, Scroll, ...) aren't keys - no keycap. */
+.mouse {
+  font: italic 11px/16px system-ui, sans-serif;
+  color: #999;
+}
+
+/* The `?` in the title taps itself once as the sheet opens - the key you
+ * just pressed. */
+.pressKey {
+  animation: keyPress 320ms ease-out 180ms both;
+}
+
+.footer {
+  padding: 8px 16px 10px;
+  border-top: 1px solid #333;
+  font-size: 11px;
+  color: #777;
+}
+
+@keyframes scrimIn {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes scrimOut {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes sheetIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.97);
+  }
+}
+
+@keyframes sheetOut {
+  to {
+    opacity: 0;
+    transform: translateY(6px) scale(0.99);
+  }
+}
+
+@keyframes groupIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+@keyframes keyPress {
+  40% {
+    transform: translateY(2px);
+    border-bottom-width: 1px;
+    background: #2d5be3;
+    color: #fff;
+  }
+}
+
+/* Reduced motion: no movement, just a quick fade in. ShortcutSheet also
+ * passes an exit time of 0 here, so closing is instant. */
+@media (prefers-reduced-motion: reduce) {
+  .sheet,
+  .group {
+    animation: scrimIn 120ms ease-out both;
+  }
+
+  .pressKey {
+    animation: none;
+  }
+}

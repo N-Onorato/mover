@@ -4,6 +4,7 @@ import { useUIStore, cancelDrawingGesture } from '../../store/uiStore'
 import { useProjectStore } from '../../store/projectStore'
 import { useHistoryStore } from '../../store/historyStore'
 import { distance, closestPointOnSegment, pointInPolygon } from '../../utils/geometry'
+import { matchesShortcut } from '../../keyboard/shortcuts'
 
 const SNAP_THRESHOLD_PX = 10
 
@@ -107,7 +108,7 @@ export const InteriorWallTool: ToolHandlers = {
   onKeyDown(e: KeyboardEvent) {
     const drawingState = useUIStore.getState().drawingState
     if (!drawingState || drawingState.kind !== 'interiorWall') return
-    if (e.key === 'Escape') cancelInteriorWall()
+    if (matchesShortcut(e, 'drawing.cancel')) cancelInteriorWall()
   },
 
   onCancel: cancelInteriorWall,

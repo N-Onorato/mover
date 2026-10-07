@@ -26,6 +26,7 @@ import { adaptiveGridSize } from '../utils/snap'
 import { BASE_PIXELS_PER_UNIT } from '../utils/scale'
 import { distance, midpoint } from '../utils/geometry'
 import { setStage } from './stageRegistry'
+import { isTypingTarget, matchesShortcut } from '../keyboard/shortcuts'
 import styles from './LayoutCanvas.module.css'
 
 export function LayoutCanvas() {
@@ -79,13 +80,14 @@ export function LayoutCanvas() {
   // Keyboard: space for pan, tool key events
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
+      if (isTypingTarget(e.target)) return
+      // Space-drag pan - SHORTCUTS['canvas.pan'] in keyboard/shortcuts.ts.
       if (e.code === 'Space') {
         isSpaceHeld.current = true
         e.preventDefault()
         return
       }
-      if (e.key === 'Escape' && useUIStore.getState().pendingPlacementDefId) {
+      if (matchesShortcut(e, 'drawing.cancel') && useUIStore.getState().pendingPlacementDefId) {
         useUIStore.getState().setPendingPlacement(null)
         return
       }
@@ -135,6 +137,7 @@ export function LayoutCanvas() {
   // is already used by SelectTool for marquee shift-add. Since the modifier
   // arrives on the same native PointerEvent that triggers this snap decision,
   // it's read directly here rather than tracked via a separate listener.
+  // Listed in the cheat sheet as SHORTCUTS['canvas.snapInvert'].
   const getWorldPoint = useCallback(
     (e: KonvaEventObject<PointerEvent>): Point => {
       const stage = stageRef.current!
@@ -354,6 +357,7 @@ export function LayoutCanvas() {
     placeFurnitureAt(defId, snappedScreenToWorld(pos))
   }
 
+  // Scroll zooms at the cursor - SHORTCUTS['canvas.zoom'].
   function handleWheel(e: React.WheelEvent<HTMLDivElement>) {
     e.preventDefault()
     const zoomFactor = e.deltaY < 0 ? 1.1 : 1 / 1.1

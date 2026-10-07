@@ -9,10 +9,13 @@ import { StatusBar } from './components/StatusBar'
 import { SettingsPanel } from './components/SettingsPanel'
 import { CalibrationLengthDialog } from './components/CalibrationLengthDialog'
 import { MobileDrawer } from './components/MobileDrawer'
+import { ShortcutSheet } from './components/ShortcutSheet'
 import { LayoutWorkspace } from './canvas/LayoutWorkspace'
 import { useProjectStore } from './store/projectStore'
 import { useLibraryStore } from './store/libraryStore'
 import { useMediaQuery } from './hooks/useMediaQuery'
+import { isCoarsePointer } from './utils/pointer'
+import { isTypingTarget, matchesShortcut } from './keyboard/shortcuts'
 import { loadFromLocalStorage } from './io/load'
 import { saveToLocalStorage } from './io/save'
 import { embedLibrary } from './furniture/library'
@@ -23,6 +26,7 @@ const AUTOSAVE_DEBOUNCE_MS = 1000
 
 export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const [catalogDrawerOpen, setCatalogDrawerOpen] = useState(false)
   const [panelsDrawerOpen, setPanelsDrawerOpen] = useState(false)
   // Narrow screens can't fit the three-column resizable layout - the side
@@ -53,12 +57,30 @@ export default function App() {
     })
   }, [])
 
+  // I5 (#24): `?` opens the shortcut cheat sheet. Touch-first devices have
+  // no physical keyboard to use shortcuts with, so they get neither the
+  // binding nor the Help menu entry. Closing is the sheet's own job: while
+  // it's open it captures `?`/Escape before this listener ever sees them.
+  useEffect(() => {
+    if (isCoarsePointer) return
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.repeat || isTypingTarget(e.target) || !matchesShortcut(e, 'help.shortcuts')) return
+      e.preventDefault()
+      setShortcutsOpen(true)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [])
+
   const workspaceLayout = useDefaultLayout({ id: 'mover-workspace-layout', storage: localStorage })
   const sidebarLayout = useDefaultLayout({ id: 'mover-right-sidebar', storage: localStorage })
 
   return (
     <div className={styles.app}>
-      <MenuBar onOpenSettings={() => setSettingsOpen(true)} />
+      <MenuBar
+        onOpenSettings={() => setSettingsOpen(true)}
+        onOpenShortcuts={isCoarsePointer ? undefined : () => setShortcutsOpen(true)}
+      />
       <Toolbar
         onToggleCatalog={isNarrow ? () => setCatalogDrawerOpen((o) => !o) : undefined}
         onTogglePanels={isNarrow ? () => setPanelsDrawerOpen((o) => !o) : undefined}
@@ -106,6 +128,9 @@ export default function App() {
       <StatusBar />
       {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
       <CalibrationLengthDialog />
+      {!isCoarsePointer && (
+        <ShortcutSheet open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
+      )}
     </div>
   )
 }

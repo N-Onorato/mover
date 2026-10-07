@@ -6,6 +6,7 @@ import { useHistoryStore } from '../../store/historyStore'
 import { distance } from '../../utils/geometry'
 import { isDoubleClick } from '../../utils/doubleClick'
 import { ROOM_CLOSE_THRESHOLD_PX } from '../../utils/pointer'
+import { matchesShortcut } from '../../keyboard/shortcuts'
 
 let lastClickMs = 0
 
@@ -60,7 +61,8 @@ export const RoomTool: ToolHandlers = {
 
     const pts = drawingState.points
 
-    // Double-click: close if we have enough points
+    // Double-click: close if we have enough points. Listed in the cheat
+    // sheet as SHORTCUTS['drawing.closeRoom'] (keyboard/shortcuts.ts).
     if (isDoubleClick(lastClickMs, now) && pts.length >= 3) {
       commitRoom(pts)
       lastClickMs = 0
@@ -89,11 +91,11 @@ export const RoomTool: ToolHandlers = {
   onKeyDown(e: KeyboardEvent) {
     const drawingState = useUIStore.getState().drawingState
     if (!drawingState) return
-    if (e.key === 'Escape') {
+    if (matchesShortcut(e, 'drawing.cancel')) {
       cancelRoom()
-    } else if (e.key === 'Enter') {
+    } else if (matchesShortcut(e, 'drawing.finish')) {
       finishRoom()
-    } else if (e.key === 'Backspace' && drawingState.kind === 'room' && drawingState.points.length > 1) {
+    } else if (matchesShortcut(e, 'drawing.undoPoint') && drawingState.kind === 'room' && drawingState.points.length > 1) {
       e.preventDefault()
       undoRoomPoint()
     }

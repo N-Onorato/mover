@@ -424,6 +424,7 @@ export const SelectTool: ToolHandlers = {
     // whether a marquee can be drawn at all.
     lastClickEdge = null
     setInteractionMode('marquee')
+    // Shift-drag adds to the selection - SHORTCUTS['canvas.marqueeAdd'].
     setMarquee({ start: worldPt, end: worldPt, additive: modifiers.shift })
   },
 
@@ -538,6 +539,7 @@ export const SelectTool: ToolHandlers = {
       const rawAngle = angle(dragState.center, worldPt) + 90
       let currentRotation = ((rawAngle % 360) + 360) % 360
       const { settings } = useProjectStore.getState().project
+      // Ctrl flips snapping - SHORTCUTS['canvas.snapInvert'].
       const effectiveSnap = modifiers.ctrl ? !settings.snapToGrid : settings.snapToGrid
       if (effectiveSnap) {
         currentRotation = (Math.round(currentRotation / 45) * 45) % 360
