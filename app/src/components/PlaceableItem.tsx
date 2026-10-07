@@ -1,5 +1,7 @@
 import type { FurnitureDefinition } from '../types/project'
 import { useUIStore } from '../store/uiStore'
+import { BASE_PIXELS_PER_UNIT } from '../utils/scale'
+import { setFurnitureDragImage } from './dragPreview'
 import type { ReactNode } from 'react'
 import styles from './CatalogPanel.module.css'
 
@@ -23,6 +25,13 @@ export function PlaceableItem({ def, onChosen, actions }: Props) {
 
   function handleDragStart(e: React.DragEvent) {
     e.dataTransfer.setData('application/mover-furniture', def.id)
+    // O2 (#42): ghost = the piece's footprint at the canvas's current zoom
+    // (LayoutCanvas's pixelsPerUnit), not a snapshot of this list row.
+    setFurnitureDragImage(
+      e.dataTransfer,
+      def,
+      BASE_PIXELS_PER_UNIT * useUIStore.getState().view.scale,
+    )
     // Dragging is its own placement path - don't leave a stale armed item
     // that would also place on the next canvas click.
     setPendingPlacement(null)
