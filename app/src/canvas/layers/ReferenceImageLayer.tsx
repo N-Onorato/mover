@@ -3,6 +3,7 @@ import { Layer, Image as KonvaImage } from 'react-konva'
 import { useProjectStore } from '../../store/projectStore'
 import { useUIStore } from '../../store/uiStore'
 import { useHtmlImage } from '../../utils/useHtmlImage'
+import { rotateImage } from '../tools/multiRotate'
 import type { ReferenceImage } from '../../types/project'
 
 interface ImageNodeProps {
@@ -10,8 +11,23 @@ interface ImageNodeProps {
   pixelsPerUnit: number
 }
 
-function ReferenceImageNode({ image, pixelsPerUnit }: ImageNodeProps) {
-  const htmlImage = useHtmlImage(image.src)
+function ReferenceImageNode({ image: committed, pixelsPerUnit }: ImageNodeProps) {
+  const htmlImage = useHtmlImage(committed.src)
+  // O7 (#47): live preview while this image is part of a multi-selection
+  // drag. Each image subscribes only to the drag it is part of (null
+  // otherwise), the same F1 rule RoomShape follows. The store isn't mutated
+  // until pointer-up.
+  const drag = useUIStore((s) =>
+    (s.dragState?.kind === 'multi' || s.dragState?.kind === 'multiRotate') &&
+    s.dragState.imageIds.includes(committed.id)
+      ? s.dragState
+      : null,
+  )
+  const image: ReferenceImage = !drag
+    ? committed
+    : drag.kind === 'multi'
+      ? { ...committed, x: committed.x + drag.dx, y: committed.y + drag.dy }
+      : { ...committed, ...rotateImage(committed, drag.pivot, drag.delta) }
   if (!htmlImage) return null
   // Positioned by center + offset so Konva rotates about the image's center,
   // matching what imageCorners()/pointInRotatedRect() assume when hit-testing

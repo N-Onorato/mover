@@ -4,6 +4,7 @@ import { useProjectStore } from '../../store/projectStore'
 import { useUIStore } from '../../store/uiStore'
 import { polygonBoundingBox } from '../../utils/geometry'
 import { WallLengthLabel } from '../WallLengthLabel'
+import { rotateInteriorWall } from '../tools/multiRotate'
 import type { Point } from '../../types/project'
 import type { UnitSystem } from '../../utils/units'
 
@@ -41,6 +42,11 @@ export function InteriorWallLayer({ pixelsPerUnit: ppu, units }: Props) {
         } else if (dragState?.kind === 'multi' && dragState.wallIds.includes(wall.id)) {
           a = { x: wall.a.x + dragState.dx, y: wall.a.y + dragState.dy }
           b = { x: wall.b.x + dragState.dx, y: wall.b.y + dragState.dy }
+        } else if (dragState?.kind === 'multiRotate' && dragState.wallIds.includes(wall.id)) {
+          // O7 (#47): rigid rotation of the selection about its pivot.
+          const rotated = rotateInteriorWall(wall, dragState.pivot, dragState.delta)
+          a = rotated.a
+          b = rotated.b
         }
 
         const bb = polygonBoundingBox(room.points)

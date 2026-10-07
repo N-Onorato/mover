@@ -1,4 +1,4 @@
-import type { FurnitureInstance, Point, ReferenceImage } from '../../types/project'
+import type { FurnitureInstance, Point, Project, ReferenceImage } from '../../types/project'
 import { useUIStore, type MultiDragState } from '../../store/uiStore'
 import { useProjectStore } from '../../store/projectStore'
 import { useHistoryStore } from '../../store/historyStore'
@@ -17,6 +17,16 @@ import { isCoarsePointer } from '../../utils/pointer'
 import { wallThresholdWorld } from '../../utils/wallThreshold'
 import { MIN_FURNITURE_SIZE } from '../../furniture/catalog'
 import { activeFurnitureInstances } from '../../project/layouts'
+import {
+  pointInRect,
+  rectCenter,
+  rotateSelectionPatches,
+  rotationDeltaFromPointer,
+  selectionBounds,
+  selectionBoxRect,
+  selectionRotateHandle,
+  type Rect,
+} from './multiRotate'
 
 /** Keyboard modifiers active for a pointer event, forwarded by LayoutCanvas
  * from the native MouseEvent so tools don't need their own window listeners. */
@@ -106,8 +116,10 @@ let lastClickEdge: { roomId: string; edgeIndex: number } | null = null
  * body hit tests below, whether `selectedIds` is the whole current selection
  * (item clicked was already part of a >1-item selection) or just the one
  * clicked item (nothing else selected). */
-function buildMultiDragState(selectedIds: string[]): MultiDragState {
-  const { project } = useProjectStore.getState()
+function buildMultiDragState(
+  selectedIds: string[],
+  project: Project = useProjectStore.getState().project,
+): MultiDragState {
   const { rooms, interiorWalls, referenceImages } = project
   // Only the active layout's furniture is editable, so it's the only
   // furniture any hit test, drag or marquee in this tool ever sees (L1, #28).
@@ -135,6 +147,49 @@ function buildMultiDragState(selectedIds: string[]): MultiDragState {
     .map((img) => img.id)
 
   return { kind: 'multi', roomIds, furnitureIds, wallIds, imageIds, dx: 0, dy: 0 }
+}
+
+/** O7 (#47): the multi-selection bounding box, or null when there isn't one.
+ * A box only exists for 2+ selected *selectable* entities - ones that survive
+ * buildMultiDragState's locked/hidden filtering - so a selection that is one
+ * live item plus a locked one behaves as the single selection it effectively
+ * is. `targets` is exactly what a move or rotate of the box would touch
+ * (including interior walls anchored to a selected room); `bounds` covers all
+ * of it, and `rect` is that padded for drawing/hit-testing at `ppu`. Shared by
+ * SelectTool's hit tests and HighlightLayer's drawing so the two can't
+ * disagree about where the box is. */
+export function computeSelectionBox(
+  selectedIds: string[],
+  project: Project,
+  ppu: number,
+): { targets: MultiDragState; bounds: Rect; rect: Rect } | null {
+  if (selectedIds.length < 2) return null
+  const targets = buildMultiDragState(selectedIds, project)
+  const selectedSet = new Set(selectedIds)
+  // Anchored walls ride along but don't count toward "2+ selected".
+  const selectedCount =
+    targets.roomIds.length +
+    targets.furnitureIds.length +
+    targets.imageIds.length +
+    targets.wallIds.filter((id) => selectedSet.has(id)).length
+  if (selectedCount < 2) return null
+
+  const roomIds = new Set(targets.roomIds)
+  const furnitureIds = new Set(targets.furnitureIds)
+  const wallIds = new Set(targets.wallIds)
+  const imageIds = new Set(targets.imageIds)
+  const bounds = selectionBounds({
+    rooms: project.rooms.filter((r) => roomIds.has(r.id)),
+    walls: project.interiorWalls.filter((w) => wallIds.has(w.id)),
+    furniture: activeFurnitureInstances(project).filter((f) => furnitureIds.has(f.id)),
+    images: project.referenceImages.filter((img) => imageIds.has(img.id)),
+  })
+  if (!bounds) return null
+  return { targets, bounds, rect: selectionBoxRect(bounds, ppu) }
+}
+
+function rotateIds(t: MultiDragState) {
+  return { roomIds: t.roomIds, furnitureIds: t.furnitureIds, wallIds: t.wallIds, imageIds: t.imageIds }
 }
 
 /** Shared onPointerDown tail for all three body hit tests (furniture/wall/
@@ -178,6 +233,14 @@ export const SelectTool: ToolHandlers = {
     const { setInteractionMode, setDragAnchorWorld } = useUIStore.getState()
     setInteractionMode('idle')
     setDragAnchorWorld(null)
+    // O1 (#41): a pointer-down always begins a fresh gesture. If the previous
+    // one never got its pointer-up, its preview (dragState / marquee) would
+    // otherwise outlive it - layers keep drawing the entity at the stale
+    // dragged position while hit-testing still uses the committed one, so the
+    // entity looks stuck and then snaps back. Every branch below that starts
+    // a drag or marquee sets its own state again.
+    useUIStore.getState().setDragState(null)
+    useUIStore.getState().setMarquee(null)
 
     const { project } = useProjectStore.getState()
     const { rooms, interiorWalls, referenceImages } = project
@@ -190,6 +253,42 @@ export const SelectTool: ToolHandlers = {
       setDragState,
       setMarquee,
     } = useUIStore.getState()
+
+    // 0. O7 (#47): multi-selection bounding box. Only exists for 2+ selected
+    // selectable entities, so it never overlaps the single-furniture handles
+    // below. Its rotate handle is tested first for the same reason those are:
+    // it must stay grabbable where it overlaps other geometry. Then the box
+    // interior: a press anywhere inside it moves the whole selection, not only
+    // a press on a member - except on an *unselected* furniture piece, which
+    // is painted on top of everything and so still wins the click (selecting
+    // it), exactly as it would with no box.
+    const box = computeSelectionBox(selectedIds, project, ppu)
+    if (box) {
+      const handle = selectionRotateHandle(box.rect, ppu)
+      if (distance(rawWorldPt, handle) <= FURNITURE_ROTATE_HANDLE_HIT_THRESHOLD_PX / ppu) {
+        setDragState({ kind: 'multiRotate', ...rotateIds(box.targets), pivot: rectCenter(box.rect), delta: 0 })
+        setInteractionMode('multiRotate')
+        lastClickEdge = null
+        return
+      }
+      if (pointInRect(rawWorldPt, box.rect)) {
+        const selectedSet = new Set(selectedIds)
+        const hitsUnselectedFurniture =
+          !lockedLayers.furniture &&
+          furnitureInstances.some(
+            (f) =>
+              f.visible &&
+              !f.locked &&
+              !selectedSet.has(f.id) &&
+              pointInRotatedRect(rawWorldPt, { x: f.x, y: f.y, width: f.width, height: f.depth }, f.rotation),
+          )
+        if (!hitsUnselectedFurniture) {
+          setSelectedWall(null)
+          startMultiDrag(selectedIds, worldPt)
+          return
+        }
+      }
+    }
 
     // 1. Furniture handle hit test - only relevant while exactly one
     // furniture instance is selected. Runs before every other hit test so
@@ -535,6 +634,14 @@ export const SelectTool: ToolHandlers = {
       return
     }
 
+    if (mode === 'multiRotate' && dragState?.kind === 'multiRotate') {
+      const { settings } = useProjectStore.getState().project
+      // Ctrl flips snapping - SHORTCUTS['canvas.snapInvert'].
+      const effectiveSnap = modifiers.ctrl ? !settings.snapToGrid : settings.snapToGrid
+      setDragState({ ...dragState, delta: rotationDeltaFromPointer(dragState.pivot, worldPt, effectiveSnap) })
+      return
+    }
+
     if (mode === 'furnitureRotate' && dragState?.kind === 'furnitureRotate') {
       const rawAngle = angle(dragState.center, worldPt) + 90
       let currentRotation = ((rawAngle % 360) + 360) % 360
@@ -709,9 +816,40 @@ export const SelectTool: ToolHandlers = {
       return
     }
 
+    if (mode === 'multiRotate' && dragState?.kind === 'multiRotate') {
+      // Same shape as the multi-move commit: the project is still the
+      // pre-drag original, so the commit is that state rotated once by the
+      // final delta, under a single undo snapshot.
+      const { delta, pivot } = dragState
+      if (delta !== 0) {
+        const { project } = useProjectStore.getState()
+        useHistoryStore.getState().pushSnapshot(project)
+        const patches = rotateSelectionPatches(
+          {
+            rooms: project.rooms,
+            furniture: activeFurnitureInstances(project),
+            walls: project.interiorWalls,
+            images: project.referenceImages,
+          },
+          dragState,
+          pivot,
+          delta,
+        )
+        const store = useProjectStore.getState()
+        for (const r of patches.rooms) store.updateRoom(r.id, { points: r.points })
+        for (const f of patches.furniture) store.updateFurniture(f.id, f.patch)
+        for (const w of patches.walls) store.updateInteriorWall(w.id, w.patch)
+        for (const img of patches.images) store.updateReferenceImage(img.id, img.patch)
+      }
+      setDragState(null)
+      setInteractionMode('idle')
+      setDragAnchorWorld(null)
+      return
+    }
+
     if (mode === 'interiorWallEndpoint' && dragState?.kind === 'interiorWallEndpoint') {
       const { project } = useProjectStore.getState()
-      const wall = project.interiorWalls.find((w) => w.id === dragState.wallId)
+      const wall =project.interiorWalls.find((w) => w.id === dragState.wallId)
       const moved = wall
         ? !pointsEqual([wall.a, wall.b], [dragState.currentA, dragState.currentB])
         : false
@@ -797,8 +935,14 @@ export const SelectTool: ToolHandlers = {
   // to the grid, and furniture - previously always raw-pointer-smooth in the
   // single-select case - visibly jumps in grid increments instead of
   // tracking the cursor.
+  //
+  // O7 (#47): a multi-rotate drag also needs raw coordinates - the angle is
+  // taken from the pointer's position around the pivot, and grid-snapping the
+  // pointer would quantize that angle in a position-dependent way (even for a
+  // selection with no furniture in it, e.g. two rooms).
   wantsRawPointer() {
-    const { selectedIds } = useUIStore.getState()
+    const { selectedIds, interactionMode } = useUIStore.getState()
+    if (interactionMode === 'multiRotate') return true
     const furnitureInstances = activeFurnitureInstances(useProjectStore.getState().project)
     return furnitureInstances.some((f) => selectedIds.includes(f.id))
   },
