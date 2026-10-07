@@ -75,7 +75,7 @@ src/
 
   utils/
     geometry.ts             # Point, Rect, Polygon math
-    scale.ts                # Real-world <-> pixel conversions
+    scale.ts                # World <-> screen projection, zoom clamp
     snap.ts                 # Grid and wall snap logic
     units.ts                # Imperial/metric formatting
 
@@ -112,7 +112,7 @@ Reference images ship with their layer locked by default — a tracing photo sho
 
 ## Tool State Machine
 
-Each tool is a plain TypeScript object/class with `onMouseDown`, `onMouseMove`, `onMouseUp`, and `onKeyDown` handlers. The active tool receives canvas pointer events from `LayoutCanvas`. Tools dispatch to the Zustand store on commit (e.g., room closed, furniture dropped).
+Each tool is a plain TypeScript object implementing `ToolHandlers` (`canvas/tools/types.ts`): `onPointerDown`, `onPointerMove`, `onPointerUp`, `onKeyDown`, `onRightClick`, plus optional hooks such as `wantsRawPointer`, `onGestureCancel` and the H1 `onFinish`/`onUndoStep`/`onCancel` actions. The active tool receives canvas pointer events from `LayoutCanvas`. Tools dispatch to the Zustand store on commit (e.g., room closed, furniture dropped).
 
 This keeps tool logic entirely outside React, making it easy to test and swap.
 
@@ -124,7 +124,7 @@ This keeps tool logic entirely outside React, making it easy to test and swap.
 - **World space**: real-world units (inches or cm), used in the data model
 - **Scale factor**: `pixelsPerUnit` — configurable, defaults to 10px per inch at 100% zoom
 
-All data is stored in world space. The `scale.ts` module converts at render time and on pointer events.
+All data is stored in world space. `utils/scale.ts` holds the projection math; `canvas/pointerToWorld.ts` applies it to pointer events against the live view and snap settings.
 
 ---
 

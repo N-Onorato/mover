@@ -10,18 +10,13 @@ import {
   furnitureRotateHandle,
   imageCorners,
 } from '../tools/SelectTool'
-import {
-  rotateFurniture,
-  rotateImage,
-  rotateInteriorWall,
-  rotatePoints,
-  selectionRotateHandle,
-  type Rect,
-} from '../tools/multiRotate'
+import { rotatePoints, selectionRotateHandle, type Rect } from '../tools/multiRotate'
 import { rectPoints, rotatePoint } from '../../utils/geometry'
 import { wallThresholdWorld } from '../../utils/wallThreshold'
 import { activeFurnitureInstances } from '../../project/layouts'
-import type { FurnitureInstance, Point } from '../../types/project'
+import { useSelectedEntity } from '../../hooks/useSelectedEntity'
+import { withFurnitureDragPreview, withImageDragPreview, wallEndpointsWithDragPreview } from './dragPreview'
+import type { Point } from '../../types/project'
 
 interface Props {
   pixelsPerUnit: number
@@ -132,54 +127,14 @@ export function HighlightLayer({ pixelsPerUnit: ppu }: Props) {
     [selectedIds, project, ppu],
   )
 
-  const selectedRoom =
-    selectedIds.length === 1 ? rooms.find((r) => r.id === selectedIds[0]) : undefined
-
-  const selectedWallEntity =
-    selectedIds.length === 1 ? interiorWalls.find((w) => w.id === selectedIds[0]) : undefined
-
-  const selectedFurnitureBase =
-    selectedIds.length === 1 ? furnitureInstances.find((f) => f.id === selectedIds[0]) : undefined
-
-  // Substitute live drag-preview values while a resize/move/rotate is in
-  // progress, mirroring the room-drag preview pattern above.
-  let selectedFurniture: FurnitureInstance | undefined = selectedFurnitureBase
-  if (
-    selectedFurnitureBase &&
-    dragState?.kind === 'multi' &&
-    dragState.furnitureIds.includes(selectedFurnitureBase.id)
-  ) {
-    selectedFurniture = {
-      ...selectedFurnitureBase,
-      x: selectedFurnitureBase.x + dragState.dx,
-      y: selectedFurnitureBase.y + dragState.dy,
-    }
-  } else if (
-    selectedFurnitureBase &&
-    dragState?.kind === 'furnitureResize' &&
-    dragState.id === selectedFurnitureBase.id
-  ) {
-    selectedFurniture = {
-      ...selectedFurnitureBase,
-      x: dragState.currentX,
-      y: dragState.currentY,
-      width: dragState.currentWidth,
-      depth: dragState.currentDepth,
-    }
-  } else if (
-    selectedFurnitureBase &&
-    dragState?.kind === 'furnitureRotate' &&
-    dragState.id === selectedFurnitureBase.id
-  ) {
-    selectedFurniture = { ...selectedFurnitureBase, rotation: dragState.currentRotation }
-  }
-
-  const selectedImageBase =
-    selectedIds.length === 1 ? referenceImages.find((img) => img.id === selectedIds[0]) : undefined
+  const selected = useSelectedEntity()
+  const selectedRoom = selected?.type === 'room' ? selected.room : undefined
+  const selectedWallEntity = selected?.type === 'interiorWall' ? selected.wall : undefined
+  // Live drag preview, so handles and outlines track the entity mid-drag.
+  const selectedFurniture =
+    selected?.type === 'furniture' ? withFurnitureDragPreview(selected.furniture, dragState) : undefined
   const selectedImage =
-    selectedImageBase && dragState?.kind === 'multi' && dragState.imageIds.includes(selectedImageBase.id)
-      ? { ...selectedImageBase, x: selectedImageBase.x + dragState.dx, y: selectedImageBase.y + dragState.dy }
-      : selectedImageBase
+    selected?.type === 'referenceImage' ? withImageDragPreview(selected.image, dragState) : undefined
 
   // Multi-select: no per-entity resize/rotate/vertex handles (those only make
   // sense for a single entity), just a plain outline per selected item so a
@@ -203,38 +158,20 @@ export function HighlightLayer({ pixelsPerUnit: ppu }: Props) {
     }
     for (const f of furnitureInstances) {
       if (idSet.has(f.id) && f.visible && !f.locked) {
-        const withPos =
-          multiDrag && multiDrag.furnitureIds.includes(f.id)
-            ? { ...f, x: f.x + multiDrag.dx, y: f.y + multiDrag.dy }
-            : rotateDrag && rotateDrag.furnitureIds.includes(f.id)
-              ? { ...f, ...rotateFurniture(f, rotateDrag.pivot, rotateDrag.delta) }
-              : f
-        outlines.push({ points: furnitureCorners(withPos).flatMap((p) => [p.x * ppu, p.y * ppu]), closed: true })
+        const live = withFurnitureDragPreview(f, dragState)
+        outlines.push({ points: furnitureCorners(live).flatMap((p) => [p.x * ppu, p.y * ppu]), closed: true })
       }
     }
     for (const w of interiorWalls) {
       if (idSet.has(w.id)) {
-        const seg =
-          multiDrag && multiDrag.wallIds.includes(w.id)
-            ? {
-                a: { x: w.a.x + multiDrag.dx, y: w.a.y + multiDrag.dy },
-                b: { x: w.b.x + multiDrag.dx, y: w.b.y + multiDrag.dy },
-              }
-            : rotateDrag && rotateDrag.wallIds.includes(w.id)
-              ? rotateInteriorWall(w, rotateDrag.pivot, rotateDrag.delta)
-              : w
+        const seg = wallEndpointsWithDragPreview(w, dragState)
         outlines.push({ points: [seg.a.x * ppu, seg.a.y * ppu, seg.b.x * ppu, seg.b.y * ppu], closed: false })
       }
     }
     for (const img of referenceImages) {
       if (idSet.has(img.id) && img.visible && !img.locked) {
-        const withPos =
-          multiDrag && multiDrag.imageIds.includes(img.id)
-            ? { ...img, x: img.x + multiDrag.dx, y: img.y + multiDrag.dy }
-            : rotateDrag && rotateDrag.imageIds.includes(img.id)
-              ? { ...img, ...rotateImage(img, rotateDrag.pivot, rotateDrag.delta) }
-              : img
-        outlines.push({ points: imageCorners(withPos).flatMap((p) => [p.x * ppu, p.y * ppu]), closed: true })
+        const live = withImageDragPreview(img, dragState)
+        outlines.push({ points: imageCorners(live).flatMap((p) => [p.x * ppu, p.y * ppu]), closed: true })
       }
     }
 
@@ -255,8 +192,7 @@ export function HighlightLayer({ pixelsPerUnit: ppu }: Props) {
     )
   }
 
-  if (!selectedRoom && !selectedWallEntity && !selectedFurniture && !selectedImage)
-    return <Layer listening={false} />
+  if (!selected) return <Layer listening={false} />
 
   let flatPoints: number[] | null = null
   let wallSegment: number[] | null = null

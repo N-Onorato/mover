@@ -1,4 +1,4 @@
-import type { ToolHandlers } from './SelectTool'
+import type { ToolHandlers } from './types'
 import type { Point } from '../../types/project'
 import { useUIStore, cancelDrawingGesture } from '../../store/uiStore'
 import { useProjectStore } from '../../store/projectStore'

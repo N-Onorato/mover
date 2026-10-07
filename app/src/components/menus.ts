@@ -1,6 +1,7 @@
 import { useProjectStore } from '../store/projectStore'
 import { useLibraryStore } from '../store/libraryStore'
 import { useUIStore, DEFAULT_VIEW } from '../store/uiStore'
+import { ZOOM_STEP } from '../utils/scale'
 import { useHistoryStore } from '../store/historyStore'
 import { downloadProject } from '../io/save'
 import { openProjectFile, LoadError } from '../io/load'
@@ -109,7 +110,6 @@ export interface MenuState {
   snapToGrid: boolean
   units: 'imperial' | 'metric'
   rulerMode: 'feet-inches' | 'simple'
-  view: { x: number; y: number; scale: number }
   hasSelection: boolean
   canUndo: boolean
   canRedo: boolean
@@ -122,7 +122,6 @@ export function buildMenus({
   snapToGrid,
   units,
   rulerMode,
-  view,
   hasSelection,
   canUndo,
   canRedo,
@@ -172,12 +171,12 @@ export function buildMenus({
         {
           label: 'Zoom In',
           shortcutId: 'zoomIn',
-          onSelect: () => useUIStore.getState().setView({ ...view, scale: Math.min(10, view.scale * 1.2) }),
+          onSelect: () => useUIStore.getState().zoomBy(ZOOM_STEP),
         },
         {
           label: 'Zoom Out',
           shortcutId: 'zoomOut',
-          onSelect: () => useUIStore.getState().setView({ ...view, scale: Math.max(0.1, view.scale / 1.2) }),
+          onSelect: () => useUIStore.getState().zoomBy(1 / ZOOM_STEP),
         },
         {
           label: 'Reset Zoom',

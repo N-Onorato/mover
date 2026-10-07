@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { ZOOM_STEP } from '../utils/scale'
 import { useUIStore } from '../store/uiStore'
 import { useProjectStore } from '../store/projectStore'
 import { useHistoryStore } from '../store/historyStore'
@@ -15,8 +16,8 @@ interface Props {
 
 export function Toolbar({ onToggleCatalog, onTogglePanels }: Props = {}) {
   const activeTool = useUIStore((s) => s.activeTool)
-  const view = useUIStore((s) => s.view)
-  const setView = useUIStore((s) => s.setView)
+  const scale = useUIStore((s) => s.view.scale)
+  const zoomBy = useUIStore((s) => s.zoomBy)
   const snapToGrid = useProjectStore((s) => s.project.settings.snapToGrid)
 
   useEffect(() => {
@@ -65,14 +66,14 @@ export function Toolbar({ onToggleCatalog, onTogglePanels }: Props = {}) {
         </button>
         <button
           className={styles.zoomBtn}
-          onClick={() => setView({ ...view, scale: Math.min(10, view.scale * 1.2) })}
+          onClick={() => zoomBy(ZOOM_STEP)}
         >
           +
         </button>
-        <span>{Math.round(view.scale * 100)}%</span>
+        <span>{Math.round(scale * 100)}%</span>
         <button
           className={styles.zoomBtn}
-          onClick={() => setView({ ...view, scale: Math.max(0.1, view.scale / 1.2) })}
+          onClick={() => zoomBy(1 / ZOOM_STEP)}
         >
           -
         </button>

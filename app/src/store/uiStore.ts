@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { Point } from '../types/project'
+import { clampScale } from '../utils/scale'
 
 export type Tool = 'select' | 'room' | 'interiorWall' | 'image' | 'annotation'
 
@@ -254,6 +255,8 @@ interface UIStore {
   toggleLayerVisibility: (layer: keyof UIStore['showLayers']) => void
   toggleLayerLock: (layer: keyof UIStore['lockedLayers']) => void
   setView: (view: ViewState) => void
+  /** Zoom by `factor` about the world origin, clamped to the allowed range. */
+  zoomBy: (factor: number) => void
 }
 
 /** Idle-state label shown for each tool when no operation is in progress. */
@@ -458,6 +461,7 @@ export const useUIStore = create<UIStore>((set) => ({
       lockedLayers: { ...s.lockedLayers, [layer]: !s.lockedLayers[layer] },
     })),
   setView: (view) => set({ view }),
+  zoomBy: (factor) => set((s) => ({ view: { ...s.view, scale: clampScale(s.view.scale * factor) } })),
 }))
 
 /** H2: shared "drop whatever this drawing state represents" behavior for a

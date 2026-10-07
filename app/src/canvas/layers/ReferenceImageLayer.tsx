@@ -2,8 +2,8 @@ import { useMemo } from 'react'
 import { Layer, Image as KonvaImage } from 'react-konva'
 import { useProjectStore } from '../../store/projectStore'
 import { useUIStore } from '../../store/uiStore'
-import { useHtmlImage } from '../../utils/useHtmlImage'
-import { rotateImage } from '../tools/multiRotate'
+import { useHtmlImage } from '../../hooks/useHtmlImage'
+import { withImageDragPreview } from './dragPreview'
 import type { ReferenceImage } from '../../types/project'
 
 interface ImageNodeProps {
@@ -23,11 +23,7 @@ function ReferenceImageNode({ image: committed, pixelsPerUnit }: ImageNodeProps)
       ? s.dragState
       : null,
   )
-  const image: ReferenceImage = !drag
-    ? committed
-    : drag.kind === 'multi'
-      ? { ...committed, x: committed.x + drag.dx, y: committed.y + drag.dy }
-      : { ...committed, ...rotateImage(committed, drag.pivot, drag.delta) }
+  const image = withImageDragPreview(committed, drag)
   if (!htmlImage) return null
   // Positioned by center + offset so Konva rotates about the image's center,
   // matching what imageCorners()/pointInRotatedRect() assume when hit-testing

@@ -45,7 +45,7 @@ export function FlowIndicator() {
         </div>
         <div className={styles.hint}>{step.hint}</div>
       </div>
-      <button className={styles.cancel} onClick={() => TOOLS[activeTool]?.onCancel?.()}>
+      <button className={styles.cancel} onClick={() => TOOLS[activeTool].onCancel?.()}>
         Cancel
       </button>
     </div>

@@ -8,7 +8,7 @@ import { RoomLayer } from './layers/RoomLayer'
 import { InteriorWallLayer } from './layers/InteriorWallLayer'
 import { FurnitureLayer } from './layers/FurnitureLayer'
 import { AnnotationLayer } from './layers/AnnotationLayer'
-import { BASE_PIXELS_PER_UNIT } from '../utils/scale'
+import { pixelsPerUnitFor } from '../utils/scale'
 import styles from './ComparisonPane.module.css'
 
 interface Props {
@@ -42,7 +42,7 @@ export function ComparisonPane({ layoutId }: Props) {
   const showGrid = useUIStore((s) => s.showGrid)
   const settings = useProjectStore((s) => s.project.settings)
 
-  const pixelsPerUnit = BASE_PIXELS_PER_UNIT * view.scale
+  const pixelsPerUnit = pixelsPerUnitFor(view.scale)
 
   useEffect(() => {
     const el = containerRef.current

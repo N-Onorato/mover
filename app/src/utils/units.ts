@@ -13,14 +13,6 @@ export function formatLength(value: number, units: UnitSystem): string {
   return `${feet}' ${inches.toFixed(1)}"`
 }
 
-export function convertToImperial(value: number): number {
-  return value / 2.54
-}
-
-export function convertToMetric(value: number): number {
-  return value * 2.54
-}
-
 export type ParseLengthResult =
   | { ok: true; value: number }
   | { ok: false; error: string }

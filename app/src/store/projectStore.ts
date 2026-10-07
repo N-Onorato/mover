@@ -30,6 +30,19 @@ import {
 // 11.43cm (4.5in * 2.54).
 const DEFAULT_WALL_THICKNESS_IMPERIAL_IN = 4.5
 
+/** Settings for a new project, also used by io/load.ts to backfill fields
+ * missing from older saved projects. */
+export const DEFAULT_SETTINGS: ProjectSettings = {
+  units: 'imperial',
+  gridSize: 12,
+  snapToGrid: true,
+  snapToWalls: true,
+  defaultWallThickness: DEFAULT_WALL_THICKNESS_IMPERIAL_IN,
+  backgroundColor: '#f5f5f0',
+  rulerMode: 'feet-inches',
+  squareCornersToleranceDeg: DEFAULT_SQUARE_CORNERS_TOLERANCE_DEG,
+}
+
 function newProject(): Project {
   const layout = createFurnitureLayout(DEFAULT_LAYOUT_NAME)
   return {
@@ -38,16 +51,7 @@ function newProject(): Project {
     name: 'Untitled Layout',
     created: new Date().toISOString(),
     modified: new Date().toISOString(),
-    settings: {
-      units: 'imperial',
-      gridSize: 12,
-      snapToGrid: true,
-      snapToWalls: true,
-      defaultWallThickness: DEFAULT_WALL_THICKNESS_IMPERIAL_IN,
-      backgroundColor: '#f5f5f0',
-      rulerMode: 'feet-inches',
-      squareCornersToleranceDeg: DEFAULT_SQUARE_CORNERS_TOLERANCE_DEG,
-    },
+    settings: { ...DEFAULT_SETTINGS },
     rooms: [],
     interiorWalls: [],
     furnitureLayouts: [layout],
@@ -86,7 +90,6 @@ interface ProjectStore {
 
   addRoom: (room: Room) => void
   updateRoom: (id: string, patch: Partial<Room>) => void
-  removeRoom: (id: string) => void
   /** O3 (#43): squares the given rooms and their interior walls using
    * settings.squareCornersToleranceDeg. Pushes one history snapshot if (and
    * only if) something changed, so a multi-room call is one undo step and a
@@ -96,7 +99,6 @@ interface ProjectStore {
 
   addInteriorWall: (wall: InteriorWall) => void
   updateInteriorWall: (id: string, patch: Partial<InteriorWall>) => void
-  removeInteriorWall: (id: string) => void
 
   // Furniture actions all target the *active* layout (project/layouts.ts).
   // Nothing in the app edits a non-active layout's furniture: to change a
@@ -118,7 +120,6 @@ interface ProjectStore {
 
   addCustomDef: (def: FurnitureDefinition) => void
   updateCustomDef: (id: string, patch: Partial<FurnitureDefinition>) => void
-  removeCustomDef: (id: string) => void
 
   addReferenceImage: (image: ReferenceImage) => void
   updateReferenceImage: (id: string, patch: Partial<ReferenceImage>) => void
@@ -126,7 +127,6 @@ interface ProjectStore {
 
   addAnnotation: (annotation: Annotation) => void
   updateAnnotation: (id: string, patch: Partial<Annotation>) => void
-  removeAnnotation: (id: string) => void
 
   markSaved: () => void
 }
@@ -215,15 +215,6 @@ export const useProjectStore = create<ProjectStore>((set) => ({
       },
       isDirty: true,
     })),
-  removeRoom: (id) =>
-    set((s) => ({
-      project: {
-        ...s.project,
-        rooms: s.project.rooms.filter((r) => r.id !== id),
-        interiorWalls: s.project.interiorWalls.filter((w) => w.roomId !== id),
-      },
-      isDirty: true,
-    })),
   squareRooms: (ids) => {
     const { project } = useProjectStore.getState()
     const tol = project.settings.squareCornersToleranceDeg
@@ -274,14 +265,6 @@ export const useProjectStore = create<ProjectStore>((set) => ({
       project: {
         ...s.project,
         interiorWalls: s.project.interiorWalls.map((w) => (w.id === id ? { ...w, ...patch } : w)),
-      },
-      isDirty: true,
-    })),
-  removeInteriorWall: (id) =>
-    set((s) => ({
-      project: {
-        ...s.project,
-        interiorWalls: s.project.interiorWalls.filter((w) => w.id !== id),
       },
       isDirty: true,
     })),
@@ -378,14 +361,6 @@ export const useProjectStore = create<ProjectStore>((set) => ({
       },
       isDirty: true,
     })),
-  removeCustomDef: (id) =>
-    set((s) => ({
-      project: {
-        ...s.project,
-        customFurnitureDefs: s.project.customFurnitureDefs.filter((d) => d.id !== id),
-      },
-      isDirty: true,
-    })),
 
   addReferenceImage: (image) =>
     set((s) => ({
@@ -429,14 +404,6 @@ export const useProjectStore = create<ProjectStore>((set) => ({
         annotations: s.project.annotations.map((a) =>
           a.id === id ? ({ ...a, ...patch } as Annotation) : a,
         ),
-      },
-      isDirty: true,
-    })),
-  removeAnnotation: (id) =>
-    set((s) => ({
-      project: {
-        ...s.project,
-        annotations: s.project.annotations.filter((a) => a.id !== id),
       },
       isDirty: true,
     })),

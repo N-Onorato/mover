@@ -10,7 +10,7 @@ import { RoomLayer } from '../canvas/layers/RoomLayer'
 import { InteriorWallLayer } from '../canvas/layers/InteriorWallLayer'
 import { FurnitureLayer } from '../canvas/layers/FurnitureLayer'
 import { AnnotationLayer } from '../canvas/layers/AnnotationLayer'
-import { BASE_PIXELS_PER_UNIT } from '../utils/scale'
+import { pixelsPerUnitFor } from '../utils/scale'
 import { activeFurnitureLayout } from '../project/layouts'
 import { findShortcut, isTypingTarget } from '../keyboard/shortcuts'
 import { useMediaQuery } from '../hooks/useMediaQuery'
@@ -152,7 +152,7 @@ function ExportPngDialogBody() {
     }
     if (effectiveArea === 'view') {
       if (!viewport) return null
-      return viewRect(view, viewport.width, viewport.height, BASE_PIXELS_PER_UNIT * view.scale)
+      return viewRect(view, viewport.width, viewport.height, pixelsPerUnitFor(view.scale))
     }
     const bounds = contentBounds(
       project,
@@ -178,7 +178,7 @@ function ExportPngDialogBody() {
   // view", 1 otherwise, so a fit-to-content export is the same drawing as the
   // canvas at 100%.
   const zoom = effectiveArea === 'view' ? view.scale : 1
-  const ppu = BASE_PIXELS_PER_UNIT * zoom
+  const ppu = pixelsPerUnitFor(zoom)
   // The area in layer pixels (the size of the image at 1x).
   const baseWidth = rect ? rect.width * ppu : 0
   const baseHeight = rect ? rect.height * ppu : 0
