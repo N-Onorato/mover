@@ -1,16 +1,10 @@
-import { useUIStore, type Tool } from '../store/uiStore'
+import { useEffect } from 'react'
+import { useUIStore } from '../store/uiStore'
 import { useProjectStore } from '../store/projectStore'
 import { useHistoryStore } from '../store/historyStore'
-import { startImageImport } from '../canvas/tools/ImageTool'
+import { formatShortcut, isTypingTarget, matchesShortcut } from '../keyboard/shortcuts'
+import { TOOLBAR_TOOLS, selectTool } from './toolbarTools'
 import styles from './Toolbar.module.css'
-
-const TOOLS: { id: Tool; label: string }[] = [
-  { id: 'select', label: 'Select' },
-  { id: 'room', label: 'Room' },
-  { id: 'interiorWall', label: 'Interior Wall' },
-  { id: 'image', label: 'Image' },
-  { id: 'annotation', label: 'Annotate' },
-]
 
 interface Props {
   /** Present only in the narrow-screen layout: toggles the catalog drawer. */
@@ -21,10 +15,21 @@ interface Props {
 
 export function Toolbar({ onToggleCatalog, onTogglePanels }: Props = {}) {
   const activeTool = useUIStore((s) => s.activeTool)
-  const setActiveTool = useUIStore((s) => s.setActiveTool)
   const view = useUIStore((s) => s.view)
   const setView = useUIStore((s) => s.setView)
   const snapToGrid = useProjectStore((s) => s.project.settings.snapToGrid)
+
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.repeat || isTypingTarget(e.target)) return
+      const tool = TOOLBAR_TOOLS.find((t) => matchesShortcut(e, t.shortcutId))
+      if (!tool) return
+      e.preventDefault()
+      selectTool(tool.id)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [])
 
   const handleToggleSnapToGrid = () => {
     useHistoryStore.getState().pushSnapshot(useProjectStore.getState().project)
@@ -39,11 +44,12 @@ export function Toolbar({ onToggleCatalog, onTogglePanels }: Props = {}) {
         </button>
       )}
       <div className={styles.tools}>
-        {TOOLS.map((t) => (
+        {TOOLBAR_TOOLS.map((t) => (
           <button
             key={t.id}
             className={`${styles.toolBtn} ${activeTool === t.id ? styles.active : ''}`}
-            onClick={() => (t.id === 'image' ? startImageImport() : setActiveTool(t.id))}
+            onClick={() => selectTool(t.id)}
+            title={`${t.label} (${formatShortcut(t.shortcutId)})`}
           >
             {t.label}
           </button>

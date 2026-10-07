@@ -4,6 +4,7 @@ import { useUIStore, cancelDrawingGesture } from '../../store/uiStore'
 import { useProjectStore } from '../../store/projectStore'
 import { useHistoryStore } from '../../store/historyStore'
 import { distance, scalePointAbout } from '../../utils/geometry'
+import { matchesShortcut } from '../../keyboard/shortcuts'
 import { openImageFile, ImageLoadError, type LoadedImage } from '../../io/loadImage'
 
 const DEFAULT_WIDTH_WORLD_UNITS = 96 // ~8ft at default (uncalibrated) scale
@@ -239,7 +240,7 @@ export const ImageTool: ToolHandlers = {
   },
   onPointerUp(_worldPt, _ppu, _modifiers) {},
   onKeyDown(e: KeyboardEvent) {
-    if (e.key === 'Escape') cancelImageFlow()
+    if (matchesShortcut(e, 'drawing.cancel')) cancelImageFlow()
   },
   onRightClick: cancelImageFlow,
   onCancel: cancelImageFlow,
