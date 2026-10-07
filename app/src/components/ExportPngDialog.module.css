@@ -1,0 +1,204 @@
+/* O5 (#45): Export PNG dialog. Scrim and chrome come from modal.module.css
+ * like the other dialogs; the rules below are this dialog's own two-column
+ * layout (preview | options). */
+
+.overlay {
+  composes: overlay from './modal.module.css';
+}
+
+.modal {
+  composes: modal from './modal.module.css';
+  width: min(820px, 94vw);
+  max-width: none;
+}
+
+.header {
+  composes: header from './modal.module.css';
+}
+
+.closeButton {
+  composes: closeButton from './modal.module.css';
+}
+
+.input {
+  composes: input from './modal.module.css';
+}
+
+.select {
+  composes: select from './modal.module.css';
+}
+
+.hint {
+  composes: hint from './modal.module.css';
+}
+
+.actions {
+  composes: actions from './modal.module.css';
+}
+
+.button {
+  composes: button from './modal.module.css';
+}
+
+.secondaryButton {
+  composes: secondaryButton from './modal.module.css';
+}
+
+.body {
+  padding: 12px;
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.previewColumn {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Fixed-size well the preview Stage is centered in; the Stage is sized to
+ * fit it (PREVIEW_BOX in ExportPngDialog.tsx), so this only reserves space. */
+.previewWell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 340px;
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+/* Checkerboard behind the Stage so a transparent background reads as
+ * transparent rather than as the dialog's dark well. */
+.checker {
+  background-color: #fff;
+  background-image:
+    linear-gradient(45deg, #c9c9c9 25%, transparent 25%, transparent 75%, #c9c9c9 75%),
+    linear-gradient(45deg, #c9c9c9 25%, transparent 25%, transparent 75%, #c9c9c9 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 8px 8px;
+}
+
+.stageFrame {
+  line-height: 0;
+  box-shadow: 0 0 0 1px #444;
+}
+
+.emptyPreview {
+  font-size: 12px;
+  color: #888;
+  padding: 0 16px;
+  text-align: center;
+}
+
+.summary {
+  font-size: 12px;
+  color: #bbb;
+}
+
+.options {
+  flex: 0 0 280px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sectionTitle {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #888;
+  margin-bottom: 2px;
+}
+
+.choice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #ccc;
+  cursor: pointer;
+  min-height: 22px;
+}
+
+.choice input {
+  accent-color: #2d5be3;
+  margin: 0;
+}
+
+.choiceDisabled {
+  composes: choice;
+  color: #666;
+  cursor: default;
+}
+
+.choiceNote {
+  color: #777;
+}
+
+.swatch {
+  width: 14px;
+  height: 14px;
+  border: 1px solid #555;
+  border-radius: 2px;
+  flex: 0 0 auto;
+}
+
+.colorInput {
+  width: 28px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid #444;
+  border-radius: 3px;
+  background: #1a1a1a;
+  cursor: pointer;
+}
+
+.nameRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.nameRow .input {
+  flex: 1;
+  min-width: 0;
+}
+
+.extension {
+  font-size: 12px;
+  color: #888;
+}
+
+.warning {
+  font-size: 11px;
+  line-height: 1.4;
+  color: #e0a63a;
+}
+
+@media (max-width: 720px) {
+  .body {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .options {
+    flex: 1 1 auto;
+  }
+
+  .previewWell {
+    height: 220px;
+  }
+}
