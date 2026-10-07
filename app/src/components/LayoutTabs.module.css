@@ -113,12 +113,14 @@
   color: #dde5ff;
 }
 
+/* O4 (#44): portaled to document.body, so this is positioned against the
+ * viewport. left/top are set from script (LayoutTabs) once the menu has been
+ * measured; 0/0 is only the first, never-painted, layout pass. */
 .menu {
-  position: absolute;
-  top: 100%;
-  right: 0;
+  position: fixed;
+  top: 0;
+  left: 0;
   min-width: 150px;
-  margin-top: 2px;
   padding: 4px;
   background: #202020;
   border: 1px solid #3a3a3a;
@@ -140,7 +142,8 @@
   cursor: pointer;
 }
 
-.entry:hover:not(:disabled) {
+.entry:hover:not(:disabled),
+.entry:focus-visible:not(:disabled) {
   background: #2d5be3;
   color: #fff;
 }
@@ -208,5 +211,9 @@
   .addButton {
     width: 32px;
     height: 32px;
+  }
+
+  .entry {
+    padding: 10px 12px;
   }
 }
