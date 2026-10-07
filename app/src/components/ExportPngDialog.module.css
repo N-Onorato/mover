@@ -8,6 +8,13 @@
 
 .modal {
   composes: modal from './modal.module.css';
+}
+
+/* The width override needs the extra specificity: modal.module.css's
+ * `width: 360px` is re-emitted by every module that composes it, so a
+ * same-specificity override here loses whenever one of those lands later in
+ * the bundle (it does - dialog.module.css via LayoutTabs/PromptDialog). */
+.overlay .modal {
   width: min(820px, 94vw);
   max-width: none;
 }
