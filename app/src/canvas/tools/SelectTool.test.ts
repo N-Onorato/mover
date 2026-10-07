@@ -653,3 +653,98 @@ describe('SelectTool reference-image drag (#30)', () => {
     expect(useProjectStore.getState().project.referenceImages[0].x).toBe(0)
   })
 })
+
+/** O1 (#41): a release outside the canvas used to leave the tool mid-gesture.
+ * LayoutCanvas now captures the pointer so the release is delivered, but the
+ * tool also has to survive a gesture whose pointer-up never arrived. */
+describe('SelectTool stuck-gesture recovery (#41)', () => {
+  const NO_MODS = { shift: false, ctrl: false }
+
+  beforeEach(() => {
+    useUIStore.setState({
+      selectedIds: [],
+      dragState: null,
+      interactionMode: 'idle',
+      dragAnchorWorld: null,
+      marquee: null,
+      lockedLayers: {
+        referenceImages: true,
+        rooms: false,
+        furniture: false,
+        annotations: false,
+      },
+    })
+    useProjectStore.setState((s) => ({
+      project: {
+        ...s.project,
+        rooms: [],
+        interiorWalls: [],
+        ...furnitureLayoutState([]),
+        referenceImages: [],
+        settings: { ...s.project.settings, snapToGrid: false },
+      },
+    }))
+    useHistoryStore.setState({ past: [], future: [] })
+  })
+
+  it('leaves no stale dragState when a drag never gets its pointer-up and the next pointer-down lands elsewhere', () => {
+    const furniture = makeFurniture({ id: 'furn-1', x: 10, y: 10 })
+    useProjectStore.setState((s) => ({ project: { ...s.project, ...furnitureLayoutState([furniture]) } }))
+
+    SelectTool.onPointerDown({ x: 13, y: 13 }, { x: 13, y: 13 }, 10, NO_MODS)
+    SelectTool.onPointerMove({ x: 50, y: 50 }, 10, NO_MODS)
+    expect(useUIStore.getState().dragState).toMatchObject({ kind: 'multi', dx: 37, dy: 37 })
+
+    // No pointer-up. The next press is on empty canvas, away from the furniture.
+    const elsewhere = { x: 200, y: 200 }
+    SelectTool.onPointerDown(elsewhere, elsewhere, 10, NO_MODS)
+
+    expect(useUIStore.getState().dragState).toBeNull()
+    expect(useUIStore.getState().interactionMode).toBe('marquee')
+    // Nothing was committed by the abandoned drag, so the entity is exactly
+    // where hit-testing believes it is.
+    expect(activeFurnitureInstances(useProjectStore.getState().project)[0]).toMatchObject({ x: 10, y: 10 })
+    expect(useHistoryStore.getState().past).toHaveLength(0)
+  })
+
+  it('drops a stale marquee when the next pointer-down starts over', () => {
+    SelectTool.onPointerDown({ x: 0, y: 0 }, { x: 0, y: 0 }, 10, NO_MODS)
+    SelectTool.onPointerMove({ x: 40, y: 40 }, 10, NO_MODS)
+    expect(useUIStore.getState().marquee).not.toBeNull()
+
+    const furniture = makeFurniture({ id: 'furn-1', x: 100, y: 100 })
+    useProjectStore.setState((s) => ({ project: { ...s.project, ...furnitureLayoutState([furniture]) } }))
+    SelectTool.onPointerDown({ x: 103, y: 103 }, { x: 103, y: 103 }, 10, NO_MODS)
+
+    expect(useUIStore.getState().marquee).toBeNull()
+    expect(useUIStore.getState().interactionMode).toBe('multi')
+  })
+
+  it('does not move anything when the pointer moves after the gesture has ended', () => {
+    const furniture = makeFurniture({ id: 'furn-1', x: 10, y: 10 })
+    useProjectStore.setState((s) => ({ project: { ...s.project, ...furnitureLayoutState([furniture]) } }))
+
+    SelectTool.onPointerDown({ x: 13, y: 13 }, { x: 13, y: 13 }, 10, NO_MODS)
+    SelectTool.onPointerMove({ x: 30, y: 30 }, 10, NO_MODS)
+    // LayoutCanvas ends the gesture at the last in-canvas position.
+    SelectTool.onPointerUp({ x: 30, y: 30 }, 10, NO_MODS)
+    SelectTool.onPointerMove({ x: 80, y: 80 }, 10, NO_MODS)
+
+    expect(useUIStore.getState().dragState).toBeNull()
+    expect(activeFurnitureInstances(useProjectStore.getState().project)[0]).toMatchObject({ x: 27, y: 27 })
+    expect(useHistoryStore.getState().past).toHaveLength(1)
+  })
+
+  it('resolves a marquee as if released at its last position', () => {
+    const furniture = makeFurniture({ id: 'furn-1', x: 10, y: 10 })
+    useProjectStore.setState((s) => ({ project: { ...s.project, ...furnitureLayoutState([furniture]) } }))
+
+    SelectTool.onPointerDown({ x: 0, y: 0 }, { x: 0, y: 0 }, 10, NO_MODS)
+    SelectTool.onPointerMove({ x: 30, y: 30 }, 10, NO_MODS)
+    SelectTool.onPointerUp({ x: 30, y: 30 }, 10, NO_MODS)
+
+    expect(useUIStore.getState().selectedIds).toEqual(['furn-1'])
+    expect(useUIStore.getState().marquee).toBeNull()
+    expect(useUIStore.getState().interactionMode).toBe('idle')
+  })
+})

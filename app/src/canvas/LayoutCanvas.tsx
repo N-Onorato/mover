@@ -59,6 +59,19 @@ export function LayoutCanvas() {
   // Cached for getContainerPoint - see its comment.
   const containerRect = useRef<DOMRect | null>(null)
 
+  // O1 (#41): mouse/pen press-and-hold gesture bookkeeping (touch has its own
+  // path above and is left alone). capturedPointerId is the pointer whose
+  // events the stage's content element has captured, so a release outside the
+  // canvas still reaches handlePointerUp. gestureRect is the container's
+  // client rect frozen at pointer-down: while a gesture is held, pointer
+  // positions outside it are ignored, so the gesture always resolves at the
+  // last in-canvas position instead of tracking the pointer over the
+  // sidebars. lastGesture is that last in-canvas position, which is what a
+  // release outside the canvas (or a lost capture) commits at.
+  const capturedPointerId = useRef<number | null>(null)
+  const gestureRect = useRef<DOMRect | null>(null)
+  const lastGesture = useRef<{ pt: Point; mods: PointerModifiers } | null>(null)
+
   // Sync container size
   useEffect(() => {
     const el = containerRef.current
@@ -175,6 +188,53 @@ export function LayoutCanvas() {
   // handlers haven't been recreated.
   const livePpu = () => BASE_PIXELS_PER_UNIT * viewRef.current.scale
 
+  /** O1 (#41): ends whatever mouse/pen gesture is in flight as if the button
+   * had been released at the last in-canvas position - a pan just stops, a
+   * SelectTool drag/marquee commits through its normal onPointerUp (at most
+   * one undo snapshot). Idempotent: with nothing in flight it does nothing,
+   * so every path that can end a gesture (pointer-up, lost capture, cancel,
+   * a stale pointer-down, a button-less pointer-move) can call it freely. */
+  const endMouseGesture = useCallback(() => {
+    capturedPointerId.current = null
+    gestureRect.current = null
+    const last = lastGesture.current
+    lastGesture.current = null
+    if (isPanning.current) {
+      isPanning.current = false
+      return
+    }
+    const { activeTool: tool, interactionMode } = useUIStore.getState()
+    if (!last || interactionMode === 'idle') return
+    TOOLS[tool]?.onPointerUp(last.pt, BASE_PIXELS_PER_UNIT * viewRef.current.scale, last.mods)
+  }, [])
+
+  // Whether a mouse/pen gesture (pan, drag, marquee) is currently held.
+  function isGestureActive(): boolean {
+    return isPanning.current || useUIStore.getState().interactionMode !== 'idle'
+  }
+
+  // True when a pointer event landed outside the container the gesture began
+  // in (only reachable while the stage's content element holds capture).
+  function isOutsideGestureRect(e: KonvaEventObject<PointerEvent>): boolean {
+    const r = gestureRect.current
+    if (!r) return false
+    return e.evt.clientX < r.left || e.evt.clientX > r.right || e.evt.clientY < r.top || e.evt.clientY > r.bottom
+  }
+
+  // O1 (#41): a lost capture without a preceding pointer-up (element removed,
+  // browser took the pointer back) must still end the gesture. After a normal
+  // pointer-up handlePointerUp has already cleared capturedPointerId, so the
+  // lostpointercapture the browser fires afterwards is a no-op.
+  useEffect(() => {
+    const content = stageRef.current?.content
+    if (!content) return
+    function onLostCapture(e: PointerEvent) {
+      if (capturedPointerId.current === e.pointerId) endMouseGesture()
+    }
+    content.addEventListener('lostpointercapture', onLostCapture)
+    return () => content.removeEventListener('lostpointercapture', onLostCapture)
+  }, [endMouseGesture])
+
   /** Shared placement path for catalog drag-drop and tap-to-place: snapshot
    * for undo, create the instance at worldPt, select it. */
   const placeFurnitureAt = useCallback((defId: string, worldPt: Point) => {
@@ -214,6 +274,22 @@ export function LayoutCanvas() {
       }
 
       const button = e.evt.button
+      if (e.evt.pointerType !== 'touch' && (button === 0 || button === 1)) {
+        // O1 (#41): a pointer-down while a previous gesture is still open
+        // means its pointer-up never arrived - close it out first so nothing
+        // stale leaks into this one - then capture this pointer so *its*
+        // pointer-up is delivered even when released outside the canvas.
+        if (isGestureActive()) endMouseGesture()
+        try {
+          stageRef.current?.content.setPointerCapture(e.evt.pointerId)
+          capturedPointerId.current = e.evt.pointerId
+        } catch {
+          // Capture can fail for a pointer the browser no longer considers
+          // active; the button-less pointer-move check still ends the gesture.
+          capturedPointerId.current = null
+        }
+        gestureRect.current = containerRef.current?.getBoundingClientRect() ?? null
+      }
       if (button === 1 || (button === 0 && isSpaceHeld.current)) {
         isPanning.current = true
         panAnchor.current = {
@@ -243,9 +319,10 @@ export function LayoutCanvas() {
         const rawWorldPt = screenToWorld(stageRef.current!.getPointerPosition()!)
         TOOLS[activeTool]?.onPointerDown(worldPt, rawWorldPt, livePpu(), getModifiers(e))
         if (e.evt.pointerType === 'touch') touchDispatchedToTool.current = true
+        else lastGesture.current = { pt: worldPt, mods: getModifiers(e) }
       }
     },
-    [activeTool, getWorldPoint, placeFurnitureAt, snappedScreenToWorld, screenToWorld],
+    [activeTool, endMouseGesture, getWorldPoint, placeFurnitureAt, snappedScreenToWorld, screenToWorld],
   )
 
   const handlePointerMove = useCallback(
@@ -276,6 +353,19 @@ export function LayoutCanvas() {
         return
       }
 
+      if (e.evt.pointerType !== 'touch' && touchPoints.current.size === 0 && isGestureActive()) {
+        if (e.evt.buttons === 0) {
+          // O1 (#41): a gesture is open but no button is down - its release
+          // was missed. End it where it last was rather than letting hover
+          // movement keep dragging the entity.
+          endMouseGesture()
+        } else if (!isPanning.current && isOutsideGestureRect(e)) {
+          // Held gesture, pointer outside the canvas (capture keeps the
+          // events coming): hold at the last in-canvas position.
+          return
+        }
+      }
+
       if (isPanning.current) {
         const dx = e.evt.clientX - panAnchor.current.clientX
         const dy = e.evt.clientY - panAnchor.current.clientY
@@ -284,8 +374,11 @@ export function LayoutCanvas() {
       }
       const worldPt = getWorldPoint(e)
       TOOLS[activeTool]?.onPointerMove(worldPt, livePpu(), getModifiers(e))
+      if (e.evt.pointerType !== 'touch' && gestureRect.current) {
+        lastGesture.current = { pt: worldPt, mods: getModifiers(e) }
+      }
     },
-    [activeTool, getWorldPoint, setView],
+    [activeTool, endMouseGesture, getWorldPoint, setView],
   )
 
   const handlePointerUp = useCallback(
@@ -307,6 +400,24 @@ export function LayoutCanvas() {
           return
         }
         touchDispatchedToTool.current = false
+      } else {
+        // O1 (#41): this release is the one the capture was waiting for.
+        const outside = isOutsideGestureRect(e)
+        const last = lastGesture.current
+        capturedPointerId.current = null
+        gestureRect.current = null
+        lastGesture.current = null
+        if (isPanning.current) {
+          isPanning.current = false
+          return
+        }
+        if (e.evt.button === 0) {
+          // Released outside the canvas: commit at the last in-canvas
+          // position, exactly like a release there.
+          const worldPt = outside && last ? last.pt : getWorldPoint(e)
+          TOOLS[activeTool]?.onPointerUp(worldPt, livePpu(), getModifiers(e))
+        }
+        return
       }
 
       if (isPanning.current) {
@@ -324,7 +435,9 @@ export function LayoutCanvas() {
   const handlePointerCancel = useCallback(
     (e: KonvaEventObject<PointerEvent>) => {
       if (e.evt.pointerType !== 'touch') {
-        isPanning.current = false
+        // O1 (#41): the browser took the pointer away; resolve the gesture at
+        // its last in-canvas position rather than leaving it half-finished.
+        endMouseGesture()
         return
       }
       touchPoints.current.delete(e.evt.pointerId)
@@ -338,7 +451,7 @@ export function LayoutCanvas() {
         containerRect.current = null
       }
     },
-    [activeTool],
+    [activeTool, endMouseGesture],
   )
 
   function handleDragOver(e: React.DragEvent<HTMLDivElement>) {

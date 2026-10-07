@@ -178,6 +178,14 @@ export const SelectTool: ToolHandlers = {
     const { setInteractionMode, setDragAnchorWorld } = useUIStore.getState()
     setInteractionMode('idle')
     setDragAnchorWorld(null)
+    // O1 (#41): a pointer-down always begins a fresh gesture. If the previous
+    // one never got its pointer-up, its preview (dragState / marquee) would
+    // otherwise outlive it - layers keep drawing the entity at the stale
+    // dragged position while hit-testing still uses the committed one, so the
+    // entity looks stuck and then snaps back. Every branch below that starts
+    // a drag or marquee sets its own state again.
+    useUIStore.getState().setDragState(null)
+    useUIStore.getState().setMarquee(null)
 
     const { project } = useProjectStore.getState()
     const { rooms, interiorWalls, referenceImages } = project
