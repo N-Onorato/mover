@@ -89,6 +89,7 @@ function project(patch: Partial<Project> = {}): Project {
       defaultWallThickness: 4.5,
       backgroundColor: '#f5f5f0',
       rulerMode: 'feet-inches',
+      squareCornersToleranceDeg: 5,
     },
     rooms: [],
     interiorWalls: [],
