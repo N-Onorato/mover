@@ -1,6 +1,6 @@
 import type { FurnitureDefinition } from '../types/project'
 import { useUIStore } from '../store/uiStore'
-import { BASE_PIXELS_PER_UNIT } from '../utils/scale'
+import { pixelsPerUnitFor } from '../utils/scale'
 import { setFurnitureDragImage } from './dragPreview'
 import type { ReactNode } from 'react'
 import styles from './CatalogPanel.module.css'
@@ -30,7 +30,7 @@ export function PlaceableItem({ def, onChosen, actions }: Props) {
     setFurnitureDragImage(
       e.dataTransfer,
       def,
-      BASE_PIXELS_PER_UNIT * useUIStore.getState().view.scale,
+      pixelsPerUnitFor(useUIStore.getState().view.scale),
     )
     // Dragging is its own placement path - don't leave a stale armed item
     // that would also place on the next canvas click.

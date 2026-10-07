@@ -4,7 +4,7 @@ import { useProjectStore } from '../../store/projectStore'
 import { useUIStore } from '../../store/uiStore'
 import { polygonBoundingBox } from '../../utils/geometry'
 import { WallLengthLabel } from '../WallLengthLabel'
-import { rotateInteriorWall } from '../tools/multiRotate'
+import { wallEndpointsWithDragPreview } from './dragPreview'
 import type { Point } from '../../types/project'
 import type { UnitSystem } from '../../utils/units'
 
@@ -34,20 +34,7 @@ export function InteriorWallLayer({ pixelsPerUnit: ppu, units }: Props) {
         const room = rooms.find((r) => r.id === wall.roomId)
         if (!room || !room.visible) return null
 
-        let a: Point = wall.a
-        let b: Point = wall.b
-        if (dragState?.kind === 'interiorWallEndpoint' && dragState.wallId === wall.id) {
-          a = dragState.currentA
-          b = dragState.currentB
-        } else if (dragState?.kind === 'multi' && dragState.wallIds.includes(wall.id)) {
-          a = { x: wall.a.x + dragState.dx, y: wall.a.y + dragState.dy }
-          b = { x: wall.b.x + dragState.dx, y: wall.b.y + dragState.dy }
-        } else if (dragState?.kind === 'multiRotate' && dragState.wallIds.includes(wall.id)) {
-          // O7 (#47): rigid rotation of the selection about its pivot.
-          const rotated = rotateInteriorWall(wall, dragState.pivot, dragState.delta)
-          a = rotated.a
-          b = rotated.b
-        }
+        const { a, b } = wallEndpointsWithDragPreview(wall, dragState)
 
         const bb = polygonBoundingBox(room.points)
         const centroid: Point = { x: bb.x + bb.width / 2, y: bb.y + bb.height / 2 }

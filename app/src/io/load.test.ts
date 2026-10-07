@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { LoadError, parseProject } from './load'
 import { PROJECT_VERSION } from '../types/project'
 import { activeFurnitureInstances } from '../project/layouts'
+import { DEFAULT_SETTINGS } from '../store/projectStore'
 
 function baseProject(settingsOverride: Record<string, unknown> = {}) {
   return {
@@ -29,6 +30,28 @@ function baseProject(settingsOverride: Record<string, unknown> = {}) {
 describe('parseProject', () => {
   it('throws on invalid JSON', () => {
     expect(() => parseProject('not json')).toThrow(LoadError)
+  })
+
+  it('loads fine when an optional array field (e.g. annotations) is missing entirely', () => {
+    const raw = baseProject() as Record<string, unknown>
+    delete raw.annotations
+    delete raw.referenceImages
+    const project = parseProject(JSON.stringify(raw))
+    expect(project.annotations).toEqual([])
+    expect(project.referenceImages).toEqual([])
+  })
+
+  it('loads fine when settings is missing entirely, filling in defaults', () => {
+    const raw = baseProject() as Record<string, unknown>
+    delete raw.settings
+    const project = parseProject(JSON.stringify(raw))
+    expect(project.settings).toEqual(DEFAULT_SETTINGS)
+  })
+
+  it('throws a clear error on a file that is not a Mover project at all', () => {
+    expect(() => parseProject(JSON.stringify({ some: 'unrelated', json: 'file' }))).toThrow(
+      "This doesn't look like a Mover project file.",
+    )
   })
 
   it('throws on unsupported version', () => {

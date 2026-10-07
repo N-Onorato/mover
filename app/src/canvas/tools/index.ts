@@ -1,4 +1,5 @@
-import type { ToolHandlers } from './SelectTool'
+import type { ToolHandlers } from './types'
+import type { Tool } from '../../store/uiStore'
 import { SelectTool } from './SelectTool'
 import { RoomTool } from './RoomTool'
 import { InteriorWallTool } from './InteriorWallTool'
@@ -8,7 +9,7 @@ import { AnnotationTool } from './AnnotationTool'
 /** Active-tool dispatch table, keyed by uiStore's Tool id. Lives here (not in
  * LayoutCanvas) so non-canvas UI like DrawingControls can reach the same tool
  * instances without importing the canvas component. */
-export const TOOLS: Record<string, ToolHandlers> = {
+export const TOOLS: Record<Tool, ToolHandlers> = {
   select: SelectTool,
   room: RoomTool,
   interiorWall: InteriorWallTool,

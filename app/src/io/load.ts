@@ -1,36 +1,27 @@
 import type { FurnitureLayout, Project } from '../types/project'
 import { PROJECT_VERSION, SUPPORTED_PROJECT_VERSIONS } from '../types/project'
 import { DEFAULT_LAYOUT_NAME, createFurnitureLayout } from '../project/layouts'
-import { DEFAULT_SQUARE_CORNERS_TOLERANCE_DEG } from '../utils/squareCorners'
+import { DEFAULT_SETTINGS } from '../store/projectStore'
 
 export class LoadError extends Error {}
 
-type SettingsMigration = (settings: Record<string, unknown>) => void
+// Top-level arrays added after some projects were saved; an older file may
+// lack any of them, so each defaults to empty rather than rejecting the file.
+// (furnitureLayouts is handled by migrateFurnitureLayouts.)
+const BACKFILLED_ARRAY_FIELDS = [
+  'rooms',
+  'interiorWalls',
+  'customFurnitureDefs',
+  'furnitureSets',
+  'referenceImages',
+  'annotations',
+] as const
 
-// Each entry backfills one ProjectSettings field that may be missing from
-// older saved projects. Add a new entry here when a new settings field with
-// a default is introduced — no other changes to parseProject should be
-// needed.
-const SETTINGS_MIGRATIONS: SettingsMigration[] = [
-  (settings) => {
-    if (settings.rulerMode === undefined) settings.rulerMode = 'feet-inches'
-  },
-  (settings) => {
-    // Matches DEFAULT_WALL_THICKNESS_IMPERIAL_IN in store/projectStore.ts
-    // (the US standard 2x4 wall thickness), introduced in E2.
-    if (settings.defaultWallThickness === undefined) settings.defaultWallThickness = 4.5
-  },
-  (settings) => {
-    // O3 (#43): tolerance for "Square corners". Same default newProject() uses.
-    if (settings.squareCornersToleranceDeg === undefined) {
-      settings.squareCornersToleranceDeg = DEFAULT_SQUARE_CORNERS_TOLERANCE_DEG
-    }
-  },
-]
-
-function migrateSettings(settings: Record<string, unknown>): void {
-  for (const migrate of SETTINGS_MIGRATIONS) migrate(settings)
-}
+// A genuine .mover.json of any version has at least one of these as an
+// array. A file with none of them isn't a slightly-older Mover project, it's
+// probably not a Mover project at all - this is where we draw the
+// reject/accept line rather than type-checking every field.
+const MOVER_ARRAY_FIELDS = [...BACKFILLED_ARRAY_FIELDS, 'furnitureLayouts', 'furnitureInstances']
 
 export function parseProject(json: string): Project {
   let data: unknown
@@ -43,18 +34,20 @@ export function parseProject(json: string): Project {
     throw new LoadError('File does not contain a project object.')
   }
   const p = data as Record<string, unknown>
+  if (!MOVER_ARRAY_FIELDS.some((field) => Array.isArray(p[field]))) {
+    throw new LoadError("This doesn't look like a Mover project file.")
+  }
   if (typeof p.version !== 'string' || !SUPPORTED_PROJECT_VERSIONS.includes(p.version)) {
     throw new LoadError(`Unsupported project version: ${p.version}`)
   }
-  // TODO: schema validation
-  const settings = p.settings as Record<string, unknown> | undefined
-  if (settings) migrateSettings(settings)
-  // interiorWalls is a top-level Project array added after some saved
-  // projects existed; SETTINGS_MIGRATIONS only backfills project.settings
-  // fields, so this is handled separately.
-  if (!Array.isArray(p.interiorWalls)) p.interiorWalls = []
-  if (!Array.isArray(p.customFurnitureDefs)) p.customFurnitureDefs = []
-  if (!Array.isArray(p.furnitureSets)) p.furnitureSets = []
+  // Older saved projects may be missing settings fields added since (e.g.
+  // rulerMode, defaultWallThickness, squareCornersToleranceDeg) or the
+  // settings object entirely; fill any gap with the new-project default.
+  const settings = typeof p.settings === 'object' && p.settings !== null ? p.settings : {}
+  p.settings = { ...DEFAULT_SETTINGS, ...settings }
+  for (const field of BACKFILLED_ARRAY_FIELDS) {
+    if (!Array.isArray(p[field])) p[field] = []
+  }
   migrateFurnitureLayouts(p)
   // Everything above brings the object up to the current shape, so it is now
   // a PROJECT_VERSION project regardless of what it was saved as - the next

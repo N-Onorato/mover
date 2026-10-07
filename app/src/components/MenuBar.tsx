@@ -16,7 +16,6 @@ export function MenuBar({ onOpenSettings, onOpenShortcuts }: MenuBarProps = {}) 
   const rootRef = useRef<HTMLDivElement>(null)
 
   const showGrid = useUIStore((s) => s.showGrid)
-  const view = useUIStore((s) => s.view)
   const hasSelection = useUIStore((s) => s.selectedIds.length > 0)
   const snapToGrid = useProjectStore((s) => s.project.settings.snapToGrid)
   const units = useProjectStore((s) => s.project.settings.units)
@@ -31,7 +30,6 @@ export function MenuBar({ onOpenSettings, onOpenShortcuts }: MenuBarProps = {}) 
         snapToGrid,
         units,
         rulerMode,
-        view,
         hasSelection,
         canUndo,
         canRedo,
@@ -43,7 +41,6 @@ export function MenuBar({ onOpenSettings, onOpenShortcuts }: MenuBarProps = {}) 
       snapToGrid,
       units,
       rulerMode,
-      view,
       hasSelection,
       canUndo,
       canRedo,
@@ -51,8 +48,8 @@ export function MenuBar({ onOpenSettings, onOpenShortcuts }: MenuBarProps = {}) 
       onOpenShortcuts,
     ],
   )
-  // Read by the keydown listener below, which is registered once - so the
-  // zoom entries act on the live view rather than the one at mount.
+  // Read by the keydown listener below, which is registered once - so
+  // shortcuts see the current enabled/checked state rather than the one at mount.
   const menusRef = useRef(menus)
   menusRef.current = menus
 

@@ -2,7 +2,7 @@ import { Fragment } from 'react'
 import { Layer, Rect, Text } from 'react-konva'
 import { useProjectStore } from '../../store/projectStore'
 import { useUIStore } from '../../store/uiStore'
-import { rotateFurniture } from '../tools/multiRotate'
+import { withFurnitureDragPreview } from './dragPreview'
 import { activeFurnitureLayout, activeFurnitureInstances, layoutFurniture } from '../../project/layouts'
 
 interface Props {
@@ -32,30 +32,7 @@ export function FurnitureLayer({ pixelsPerUnit: ppu, layoutId }: Props) {
   return (
     <Layer>
       {instances.filter((f) => f.visible).map((f) => {
-        // Live-preview values while this instance is being moved/resized/
-        // rotated: the store isn't mutated until pointer-up.
-        let x = f.x
-        let y = f.y
-        let width = f.width
-        let depth = f.depth
-        let rotation = f.rotation
-        if (dragState?.kind === 'furnitureResize' && dragState.id === f.id) {
-          x = dragState.currentX
-          y = dragState.currentY
-          width = dragState.currentWidth
-          depth = dragState.currentDepth
-        } else if (dragState?.kind === 'furnitureRotate' && dragState.id === f.id) {
-          rotation = dragState.currentRotation
-        } else if (dragState?.kind === 'multi' && dragState.furnitureIds.includes(f.id)) {
-          x = f.x + dragState.dx
-          y = f.y + dragState.dy
-        } else if (dragState?.kind === 'multiRotate' && dragState.furnitureIds.includes(f.id)) {
-          // O7 (#47): rigid rotation of the selection about its pivot.
-          const rotated = rotateFurniture(f, dragState.pivot, dragState.delta)
-          x = rotated.x
-          y = rotated.y
-          rotation = rotated.rotation
-        }
+        const { x, y, width, depth, rotation } = withFurnitureDragPreview(f, dragState)
 
         const cx = (x + width / 2) * ppu
         const cy = (y + depth / 2) * ppu

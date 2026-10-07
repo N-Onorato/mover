@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useUIStore } from '../store/uiStore'
 import { useProjectStore } from '../store/projectStore'
 import type { SquareRoomsOutcome } from '../store/projectStore'
@@ -12,36 +12,13 @@ import {
   resetPatch,
 } from '../furniture/catalog'
 import { findPiece } from '../furniture/resolve'
-import { activeFurnitureInstances } from '../project/layouts'
+import { useSnapshotOnce, useSnapshotOnFocus } from '../hooks/useSnapshotOnce'
+import { useSelectedEntity } from '../hooks/useSelectedEntity'
 import { useLibraryStore } from '../store/libraryStore'
 import { SaveToSetDialog } from './SaveToSetDialog'
 import type { Room, InteriorWall, FurnitureInstance, ReferenceImage } from '../types/project'
 import { resizeImagePatch, startRecalibration } from '../canvas/tools/ImageTool'
 import styles from './PropertiesPanel.module.css'
-
-/** One history snapshot per interaction rather than per change event - a
- * held-down slider or a dragged color swatch would otherwise bury the undo
- * stack under a snapshot per frame. `take` is idempotent until `release`. */
-function useSnapshotOnce() {
-  const snapshotTaken = useRef(false)
-  return {
-    take: () => {
-      if (snapshotTaken.current) return
-      snapshotTaken.current = true
-      useHistoryStore.getState().pushSnapshot(useProjectStore.getState().project)
-    },
-    release: () => {
-      snapshotTaken.current = false
-    },
-  }
-}
-
-/** useSnapshotOnce bound to a text field's focus/blur - the interaction
- * boundary for a typed edit. */
-export function useSnapshotOnFocus() {
-  const { take, release } = useSnapshotOnce()
-  return { onFocus: take, onBlur: release }
-}
 
 /** Shared by every rotation field: parses degrees and wraps into [0, 360),
  * or null when the input isn't a number. */
@@ -462,61 +439,49 @@ export function PropertiesPanel() {
   const selectedIds = useUIStore((s) => s.selectedIds)
   const selectedWall = useUIStore((s) => s.selectedWall)
   const rooms = useProjectStore((s) => s.project.rooms)
-  const interiorWalls = useProjectStore((s) => s.project.interiorWalls)
-  const furnitureInstances = useProjectStore((s) => activeFurnitureInstances(s.project))
-  const referenceImages = useProjectStore((s) => s.project.referenceImages)
+  const selected = useSelectedEntity()
 
   // O3 (#43): a multi-selection that includes several rooms can square them
   // all at once (one undo step).
   const selectedRoomIds = selectedIds.filter((id) => rooms.some((r) => r.id === id))
 
-  const selectedRoom =
-    selectedIds.length === 1 ? rooms.find((r) => r.id === selectedIds[0]) : undefined
-  const selectedWallEntity =
-    selectedIds.length === 1 ? interiorWalls.find((w) => w.id === selectedIds[0]) : undefined
-  const selectedFurniture =
-    selectedIds.length === 1 ? furnitureInstances.find((f) => f.id === selectedIds[0]) : undefined
-  const selectedImage =
-    selectedIds.length === 1 ? referenceImages.find((img) => img.id === selectedIds[0]) : undefined
-
-  // Stated once rather than repeated per empty-state branch, so a new entity
-  // type is one edit here instead of one per branch.
-  const hasSingleSelection = !!(
-    selectedRoom ||
-    selectedWallEntity ||
-    selectedFurniture ||
-    selectedImage
-  )
+  let content
+  switch (selected?.type) {
+    case 'room':
+      content =
+        selectedWall?.roomId === selected.room.id ? (
+          <WallProperties room={selected.room} edgeIndex={selectedWall.edgeIndex} />
+        ) : (
+          <RoomProperties room={selected.room} />
+        )
+      break
+    case 'interiorWall':
+      content = <InteriorWallProperties wall={selected.wall} />
+      break
+    case 'furniture':
+      content = <FurnitureProperties instance={selected.furniture} />
+      break
+    case 'referenceImage':
+      content = <ImageProperties image={selected.image} />
+      break
+    default:
+      content = (
+        <p className={styles.empty}>
+          {selectedIds.length === 0 ? 'Nothing selected' : `${selectedIds.length} item(s) selected`}
+        </p>
+      )
+  }
 
   return (
     <div className={styles.panel}>
       <div className={styles.header}>Properties</div>
       <div className={styles.body}>
-        {!hasSingleSelection && (
-          <p className={styles.empty}>
-            {selectedIds.length === 0
-              ? 'Nothing selected'
-              : `${selectedIds.length} item(s) selected`}
-          </p>
-        )}
+        {content}
         {selectedRoomIds.length > 1 && (
           <div className={styles.section}>
             <div className={styles.sectionTitle}>{selectedRoomIds.length} Rooms</div>
             <SquareCornersControl key={selectedRoomIds.join(',')} roomIds={selectedRoomIds} />
           </div>
-        )}
-        {selectedWallEntity && <InteriorWallProperties wall={selectedWallEntity} />}
-        {selectedRoom && selectedWall && selectedWall.roomId === selectedRoom.id && (
-          <WallProperties room={selectedRoom} edgeIndex={selectedWall.edgeIndex} />
-        )}
-        {selectedRoom && (!selectedWall || selectedWall.roomId !== selectedRoom.id) && (
-          <RoomProperties room={selectedRoom} />
-        )}
-        {!selectedRoom && !selectedWallEntity && selectedFurniture && (
-          <FurnitureProperties instance={selectedFurniture} />
-        )}
-        {!selectedRoom && !selectedWallEntity && !selectedFurniture && selectedImage && (
-          <ImageProperties image={selectedImage} />
         )}
       </div>
     </div>

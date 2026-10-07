@@ -1,4 +1,5 @@
 import type { Point } from '../types/project'
+import type { ViewState } from '../store/uiStore'
 
 /** Screen pixels per world unit at zoom 1 (10px per inch-or-cm grid unit at
  * the default 12-unit grid, i.e. 10px per foot). Multiplied by `view.scale`
@@ -6,33 +7,38 @@ import type { Point } from '../types/project'
  * comparison pane, which must agree on it to be comparable at all. */
 export const BASE_PIXELS_PER_UNIT = 10
 
-export interface ScaleConfig {
-  pixelsPerUnit: number
-  zoom: number
-  originX: number
-  originY: number
+/** Zoom factor for one zoom-in/out button or menu step. */
+export const ZOOM_STEP = 1.2
+
+export function pixelsPerUnitFor(scale: number): number {
+  return BASE_PIXELS_PER_UNIT * scale
 }
 
-export function worldToScreen(pt: Point, cfg: ScaleConfig): Point {
-  const ppu = cfg.pixelsPerUnit * cfg.zoom
+export function screenToWorld(pos: Point, view: ViewState): Point {
+  const ppu = pixelsPerUnitFor(view.scale)
+  return { x: (pos.x - view.x) / ppu, y: (pos.y - view.y) / ppu }
+}
+
+export function clampScale(scale: number): number {
+  return Math.min(10, Math.max(0.05, scale))
+}
+
+/**
+ * New view that keeps `worldPoint` glued under `screenAnchor` once the scale
+ * changes to `newScale`. Used by both wheel-zoom (anchor = live cursor pos,
+ * world point derived from the live view) and pinch-zoom (anchor = current
+ * touch midpoint, world point derived from the view captured at gesture start)
+ * — the two differ only in which view/screen point they read, not in the math.
+ */
+export function zoomKeepingWorldPointFixed(
+  worldPoint: Point,
+  screenAnchor: Point,
+  newScale: number,
+): ViewState {
+  const ppu = pixelsPerUnitFor(newScale)
   return {
-    x: pt.x * ppu + cfg.originX,
-    y: pt.y * ppu + cfg.originY,
+    x: screenAnchor.x - worldPoint.x * ppu,
+    y: screenAnchor.y - worldPoint.y * ppu,
+    scale: newScale,
   }
-}
-
-export function screenToWorld(pt: Point, cfg: ScaleConfig): Point {
-  const ppu = cfg.pixelsPerUnit * cfg.zoom
-  return {
-    x: (pt.x - cfg.originX) / ppu,
-    y: (pt.y - cfg.originY) / ppu,
-  }
-}
-
-export function worldLengthToPixels(units: number, cfg: ScaleConfig): number {
-  return units * cfg.pixelsPerUnit * cfg.zoom
-}
-
-export function pixelsToWorldLength(px: number, cfg: ScaleConfig): number {
-  return px / (cfg.pixelsPerUnit * cfg.zoom)
 }

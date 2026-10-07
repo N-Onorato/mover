@@ -1,4 +1,4 @@
-import type { ToolHandlers } from './SelectTool'
+import type { ToolHandlers } from './types'
 
 export const AnnotationTool: ToolHandlers = {
   onPointerDown(_worldPt, _rawWorldPt, _ppu, _modifiers) {},

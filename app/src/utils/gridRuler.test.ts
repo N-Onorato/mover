@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { FOOT_INCH_ZOOM_THRESHOLD, imperialFootInchTicks } from './gridRuler'
+import { BASE_PIXELS_PER_UNIT } from './scale'
 
 describe('imperialFootInchTicks', () => {
-  const pixelsPerUnit = 10 // BASE_PIXELS_PER_UNIT
+  const pixelsPerUnit = BASE_PIXELS_PER_UNIT
 
   it('below the zoom threshold, only produces whole-foot ticks', () => {
     const zoom = FOOT_INCH_ZOOM_THRESHOLD - 0.5

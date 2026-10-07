@@ -38,6 +38,7 @@ interface ProjectSettings {
   snapToWalls: boolean
   defaultWallThickness: number   // in units
   backgroundColor: string        // CSS color
+  rulerMode: 'feet-inches' | 'simple'  // display format for measurements
   squareCornersToleranceDeg: number  // degrees (default 5, 0-20); "Square corners" snaps edges/corners within this of 90
 }
 ```
@@ -63,6 +64,24 @@ interface Room {
 interface Point {
   x: number
   y: number
+}
+```
+
+---
+
+## Interior Wall
+
+A free-standing wall segment inside a room (not part of the room's perimeter polygon), e.g. to divide a room into sub-spaces.
+
+```ts
+interface InteriorWall {
+  id: string
+  roomId: string               // the room this wall belongs to
+  a: Point                     // wall start, world space
+  b: Point                     // wall end, world space
+  thickness: number            // in units
+  locked: boolean
+  visible: boolean
 }
 ```
 
@@ -196,7 +215,7 @@ interface DimensionLine {
 
 ## Catalog (built-in)
 
-The built-in catalog is a static JSON file (`src/furniture/catalog.json`) that ships with the app. It is never stored in the project file — only `customFurnitureDefs` (user-created) are persisted. Instances reference definitions by `definitionId`; if the ID is not found in the built-in catalog, it falls back to `customFurnitureDefs`. Built-ins always win a collision, so a saved piece can never shadow a catalog entry.
+The built-in catalog is a static TypeScript module (`src/furniture/catalog.ts`) that ships with the app. It is never stored in the project file — only `customFurnitureDefs` (user-created) are persisted. Instances reference definitions by `definitionId`; if the ID is not found in the built-in catalog, it falls back to `customFurnitureDefs`. Built-ins always win a collision, so a saved piece can never shadow a catalog entry.
 
 ---
 
